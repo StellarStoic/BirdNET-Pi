@@ -13,12 +13,13 @@ BirdNET-Pi can be exposed as a Tor hidden service (v3 onion address). When enabl
 
 
 ## Installation
-**This Tor option has only been tested on the RPi3B+ (bookworm 64bit Lite)**
+**This Tor option has only been build and tested on the RPi3B+ (bookworm 64bit Lite)**
+**I highly recommend using more powerful raspberry. birdnet-pi on cheap RPi5 2GB is working smoothly**
 
 
 ## Example Installation Workflow
 
-0. **Prerequisites** before birdnetPi install for **rpi3b+** & **rpi 0 W2**
+0. **Prerequisites** before birdnetPi install for **rpi3b+** & **rpi 0 W2 only**
 -  `sudo sed -i 's/CONF_SWAPSIZE=100/CONF_SWAPSIZE=2048/g' /etc/dphys-swapfile`
 -  `sudo sed -i 's/#CONF_MAXSWAP=2048/CONF_MAXSWAP=4096/g' /etc/dphys-swapfile`
 -  `sudo nano /etc/rc.local`
