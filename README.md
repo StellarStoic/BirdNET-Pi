@@ -3,6 +3,7 @@
 <h1 align="center">
   BirdNET-Pi
 </h1>
+<h3 align="center">This fork is suited for this fork only with a TOR hosting option. Do not use it as an update to your existing <a href="https://github.com/Nachtzuster/BirdNET-Pi">Nachtzuster's</a> version, because migration from one to another has not been tested.</h3>
 <p align="center">
 A realtime acoustic bird classification system for the Raspberry Pi 5, 4B, 400, 3B+, and 0W2
 </p>
@@ -14,7 +15,7 @@ Icon made by <a href="https://www.freepik.com" title="Freepik">Freepik</a> from 
 </p>
 
 ## About this fork:
-I've been building on [mcguirepr89's](https://github.com/mcguirepr89/BirdNET-Pi) most excellent work to further update and improve BirdNET-Pi. Maybe someone will find it useful.
+I've been building on [Nachtzuster's](https://github.com/Nachtzuster/BirdNET-Pi) fork of [mcguirepr89's](https://github.com/mcguirepr89/BirdNET-Pi) most excellent work to further update and improve BirdNET-Pi with Tor. Maybe someone will find it useful.
 
 Changes include:
 
@@ -56,6 +57,7 @@ Check out birds from around the world
 * [phpSysInfo](https://github.com/phpsysinfo/phpsysinfo)
 * [Apprise Notifications](https://github.com/caronc/apprise) supporting 90+ notification platforms
 * Localization supported
+* Hosting free on the Tor network
 
 ## Requirements
 * A Raspberry Pi 5, Raspberry 4B, Raspberry Pi 400, Raspberry Pi 3B+, or Raspberry Pi 0W2 (The 3B+ and 0W2 must run on RaspiOS-ARM64-**Lite**)
@@ -63,16 +65,17 @@ Check out birds from around the world
 * A USB Microphone or Sound Card
 
 ## Installation
-[A comprehensive installation guide is available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Installation-Guide). This guide is slightly out-dated: make sure to pick Bookworm, also the curl command is still pointing to mcguirepr89's repo.
+[A comprehensive installation guide is available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Installation-Guide). This guide is slightly out-dated: make sure to pick Bookworm, also the curl command is still pointing to mcguirepr89's repo. Also check /docs/TOR_HOSTING.md to install the fork with the TOR option.
 
 Please note that installing BirdNET-Pi on top of other servers is not supported. If this is something that you require, please open a discussion for your idea and inquire about how to contribute to development.
 
-[Raspberry Pi 3B[+] and 0W2 installation guide available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/RPi0W2-Installation-Guide)
+[Raspberry Pi 3B[+] and 0W2 installation guide available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/RPi0W2-Installation-Guide) and also mentioned in the /docs/TOR_HOSTING.md
 
 The system can be installed with:
 ```
-curl -s https://raw.githubusercontent.com/Nachtzuster/BirdNET-Pi/main/newinstaller.sh | bash
+curl -fsSL https://raw.githubusercontent.com/StellarStoic/BirdNET-Pi/main/newinstaller.sh | bash
 ```
+
 The installer takes care of any and all necessary updates, so you can run that as the very first command upon the first boot, if you'd like.
 
 The installation creates a log in `$HOME/installation-$(date "+%F").txt`.
@@ -81,6 +84,7 @@ The BirdNET-Pi can be accessed from any web browser on the same network:
 - http://birdnetpi.local OR your Pi's IP address
 - Default Basic Authentication Username: birdnet
 - Password is empty by default. Set this in "Tools" > "Settings" > "Advanced Settings"
+**please note that due to a bug in Android Tor browser, authentication window is not supported. On desktop, work fine**
 
 Please take a look at the [wiki](https://github.com/mcguirepr89/BirdNET-Pi/wiki) and [discussions](https://github.com/mcguirepr89/BirdNET-Pi/discussions) for information on
 - [BirdNET-Pi's Deep Convolutional Neural Network(s)](https://github.com/mcguirepr89/BirdNET-Pi/wiki/BirdNET-Pi:-some-theory-on-classification-&-some-practical-hints)
@@ -136,7 +140,7 @@ Please note that upgrading your underlying OS to Bookworm is not going to work. 
 Run these commands to migrate to this repo:
 ```
 git remote remove origin
-git remote add origin https://github.com/Nachtzuster/BirdNET-Pi.git
+git remote add origin https://github.com/StellarStoic/BirdNET-Pi.git
 ./scripts/update_birdnet.sh
 ```
 ## Troubleshooting and Ideas
