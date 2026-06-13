@@ -3,7 +3,7 @@
 <h1 align="center">
   BirdNET-Pi
 </h1>
-<h3 align="center">This fork is suited for this fork only with a TOR hosting option. Do not use it as an update to your existing <a href="https://github.com/Nachtzuster/BirdNET-Pi">Nachtzuster's</a> version, because migration from one to another has not been tested.</h3>
+<h3 align="center">This edition adds managed Tor v3 onion-service exposure for secure remote access without opening an inbound router port.</h3>
 <p align="center">
 A realtime acoustic bird classification system for the Raspberry Pi 5, 4B, 400, 3B+, and 0W2
 </p>
@@ -15,7 +15,7 @@ Icon made by <a href="https://www.freepik.com" title="Freepik">Freepik</a> from 
 </p>
 
 ## About this fork:
-I've been building on [Nachtzuster's](https://github.com/Nachtzuster/BirdNET-Pi) fork of [mcguirepr89's](https://github.com/mcguirepr89/BirdNET-Pi) most excellent work to further update and improve BirdNET-Pi with Tor. Maybe someone will find it useful.
+This edition is built on the actively maintained [Nachtzuster/BirdNET-Pi](https://github.com/Nachtzuster/BirdNET-Pi) fork of [mcguirepr89/BirdNET-Pi](https://github.com/mcguirepr89/BirdNET-Pi). It follows Nachtzuster's updates while adding a managed Tor onion service for remote dashboard access.
 
 Changes include:
 
@@ -30,7 +30,7 @@ Changes include:
  - Rework analysis to consolidate analysis/server/extraction. Should make analysis more robust and slightly more efficient, especially on installations with a large number of recordings
  - Bump tflite_runtime to 2.17.1, it is faster
  - Rework daily_plot.py (chart_viewer) to run as a daemon to avoid the very expensive startup
- - Tor Hidden Service Support – Host your BirdNET-Pi over Tor with a .onion address (see [Tor Hosting Guide](docs/TOR_HOSTING.md))
+ - Managed Tor v3 onion service with a stable `.onion` address, dashboard controls, protected identity keys, and supported proof-of-work defenses
  - Lots of fixes & cleanups
 
 !! note: see 'Migrating' on how to migrate from mcguirepr89
@@ -57,7 +57,7 @@ Check out birds from around the world
 * [phpSysInfo](https://github.com/phpsysinfo/phpsysinfo)
 * [Apprise Notifications](https://github.com/caronc/apprise) supporting 90+ notification platforms
 * Localization supported
-* Hosting free on the Tor network
+* **Remote dashboard access through a Tor v3 onion service**, without port forwarding or a public domain
 
 ## Requirements
 * A Raspberry Pi 5, Raspberry 4B, Raspberry Pi 400, Raspberry Pi 3B+, or Raspberry Pi 0W2 (The 3B+ and 0W2 must run on RaspiOS-ARM64-**Lite**)
@@ -65,26 +65,67 @@ Check out birds from around the world
 * A USB Microphone or Sound Card
 
 ## Installation
-[A comprehensive installation guide is available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Installation-Guide). This guide is slightly out-dated: make sure to pick Bookworm, also the curl command is still pointing to mcguirepr89's repo. Also check /docs/TOR_HOSTING.md to install the fork with the TOR option.
+[A comprehensive installation guide is available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Installation-Guide). This guide is slightly outdated, so use the installation command below to install this Tor-enabled edition from `StellarStoic/BirdNET-Pi`.
 
 Please note that installing BirdNET-Pi on top of other servers is not supported. If this is something that you require, please open a discussion for your idea and inquire about how to contribute to development.
 
 [Raspberry Pi 3B[+] and 0W2 installation guide available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/RPi0W2-Installation-Guide) and also mentioned in the /docs/TOR_HOSTING.md
 
 The system can be installed with:
-```
+```bash
+# Download and run this edition's BirdNET-Pi installer.
 curl -fsSL https://raw.githubusercontent.com/StellarStoic/BirdNET-Pi/main/newinstaller.sh | bash
 ```
 
 The installer takes care of any and all necessary updates, so you can run that as the very first command upon the first boot, if you'd like.
 
 The installation creates a log in `$HOME/installation-$(date "+%F").txt`.
-## Access
+## Local Access
 The BirdNET-Pi can be accessed from any web browser on the same network:
 - http://birdnetpi.local OR your Pi's IP address
 - Default Basic Authentication Username: birdnet
 - Password is empty by default. Set this in "Tools" > "Settings" > "Advanced Settings"
-**please note that due to a bug in Android Tor browser, authentication window is not supported. On desktop, work fine**
+
+## Remote Access over Tor
+
+This edition can expose the BirdNET-Pi dashboard as a Tor v3 onion service. It provides remote access without router port forwarding, public DNS, or directly revealing the visitor's IP address to BirdNET-Pi, and the host's IP address is also hidden from the visitor.
+
+To enable it from the dashboard:
+
+1. Open **Tools > Settings > Advanced Settings**.
+2. Find **Tor Hosting**.
+3. Select **Host this BirdNET-Pi on Tor**.
+4. Save the settings and wait up to 60 seconds.
+5. Open the generated `http://...onion` address in [Tor Browser](https://www.torproject.org/download/).
+
+The Tor service can also be enabled, restarted, or disabled under **Tools > Services > Tor Onion Service**. Disabling it preserves the private identity keys, so the same onion address returns when it is enabled again.
+
+Command-line management is also available:
+
+```bash
+# Enable the BirdNET-Pi onion service and generate an address when needed.
+sudo /usr/local/bin/update_tor_service.sh enable
+
+# Restart an enabled onion service without changing its address.
+sudo /usr/local/bin/update_tor_service.sh restart
+
+# Disable exposure while preserving the onion address and private identity.
+sudo /usr/local/bin/update_tor_service.sh disable
+
+# Permanently replace the onion identity and generate a new address.
+sudo /usr/local/bin/update_tor_service.sh reset
+```
+
+Important security notes:
+
+- An onion address is not a password. Anyone who obtains it can attempt to access the dashboard.
+- Set a strong BirdNET-Pi authentication password before enabling remote access.
+- Tor protects the network route, but recordings, hostnames, linked resources, and dashboard content can still reveal identifying information.
+- Enabling Tor does not disable normal LAN access.
+- Keep `/var/lib/tor/birdnet_hidden_service/` private and backed up if the onion address must remain permanent.
+- Tor 0.4.8+ proof-of-work defenses are enabled automatically when the installed Tor package supports them.
+
+See the complete [Tor Hosting Guide](docs/TOR_HOSTING.md) for troubleshooting, operational guidance, and configuration details.
 
 Please take a look at the [wiki](https://github.com/mcguirepr89/BirdNET-Pi/wiki) and [discussions](https://github.com/mcguirepr89/BirdNET-Pi/discussions) for information on
 - [BirdNET-Pi's Deep Convolutional Neural Network(s)](https://github.com/mcguirepr89/BirdNET-Pi/wiki/BirdNET-Pi:-some-theory-on-classification-&-some-practical-hints)
@@ -138,9 +179,12 @@ Before switching, make sure your installation is fully up-to-date. Also make sur
 Please note that upgrading your underlying OS to Bookworm is not going to work. Please stick to Bullseye. If you do want Bookworm, you need to start from a fresh install and copy back your data. (remember the backup!)
 
 Run these commands to migrate to this repo:
-```
+```bash
+# Point an existing BirdNET-Pi checkout at this Tor-enabled edition.
 git remote remove origin
 git remote add origin https://github.com/StellarStoic/BirdNET-Pi.git
+
+# Apply the updates from the newly configured repository.
 ./scripts/update_birdnet.sh
 ```
 ## Troubleshooting and Ideas
