@@ -17,7 +17,7 @@ install_depends() {
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
   apt -qqq update && apt -qqy upgrade
   echo "icecast2 icecast2/icecast-setup boolean false" | debconf-set-selections
-  apt install --no-install-recommends -qqy caddy sqlite3 php-sqlite3 php-fpm php-curl php-xml php-zip php icecast2 \
+  apt install --no-install-recommends -qqy caddy sqlite3 php-sqlite3 php-fpm php-curl php-xml php-zip php-mbstring php icecast2 \
     pulseaudio avahi-utils sox libsox-fmt-mp3 alsa-utils ffmpeg \
     wget curl unzip bc tor \
     python3-pip python3-venv lsof net-tools inotify-tools
@@ -71,6 +71,7 @@ create_necessary_dirs() {
   [ -L ${EXTRACTED}/spectrogram.png ] || sudo -u ${USER} ln -sf ${RECS_DIR}/StreamData/spectrogram.png ${EXTRACTED}/spectrogram.png
 
   sudo -u ${USER} ln -fs $my_dir/exclude_species_list.txt $my_dir/scripts
+  sudo -u ${USER} ln -fs $my_dir/confirmed_species_list.txt $my_dir/scripts
   sudo -u ${USER} ln -fs $my_dir/include_species_list.txt $my_dir/scripts
   sudo -u ${USER} ln -fs $my_dir/whitelist_species_list.txt $my_dir/scripts
   sudo -u ${USER} ln -fs $my_dir/homepage/* ${EXTRACTED}
