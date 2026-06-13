@@ -1,6 +1,6 @@
 # Tor Hosting Guide for BirdNET-Pi
 
-This document explains how to host your BirdNET-Pi instance over Tor, a network that provides anonymity and bypasses censorship/geographic restrictions and its FREE.
+This document explains how to make BirdNET-Pi remotely accessible through a Tor v3 onion service without opening an inbound router port.
 
 ## Overview
 
@@ -9,7 +9,8 @@ BirdNET-Pi can be exposed as a Tor hidden service (v3 onion address). When enabl
 **Key Features:**
 - One-click enable/disable from Advanced Settings UI
 - Onion v3 address generation
-- Regenerate onion address if needed
+- Stable onion address across disable/re-enable operations
+- Explicit onion identity reset when needed
 
 
 ## Installation
@@ -54,7 +55,7 @@ EOF'
 3. Find the **Tor Hosting** section
 4. Check the box: **"Host this BirdNET-Pi on Tor"**
 5. Click **"Update Settings"**
-6. Wait 60 seconds for the onion address to be generated
+6. Wait up to 60 seconds for the onion address to be generated
 7. Reload the page; the onion address will appear
 8. If you think nothing has happened, refresh the page
 
@@ -69,6 +70,12 @@ sudo /usr/local/bin/update_tor_service.sh enable
 
 # Disable
 sudo /usr/local/bin/update_tor_service.sh disable
+
+# Restart an enabled onion service without changing its address
+sudo /usr/local/bin/update_tor_service.sh restart
+
+# Deliberately delete the old keys and generate a new onion address
+sudo /usr/local/bin/update_tor_service.sh reset
 ```
 
 Both commands will output the onion address (if enabling) or confirmation (if disabling).
@@ -87,7 +94,7 @@ The address appears in the **Tor Hosting** section under Advanced Settings, and 
 
 ### Benefits of Tor
 
-- **Anonymity:** Visitors' IP addresses are hidden
+- **Private routing:** Visitors and the BirdNET-Pi host do not make a direct network connection
 - **Censorship Resistance:** Accessible from countries that block your domain/IP
 - **No Domain Needed:** No need for DNS or public IP registration
 - **Encryption:** All Tor traffic is encrypted end-to-end
@@ -96,9 +103,10 @@ The address appears in the **Tor Hosting** section under Advanced Settings, and 
 ### Limitations
 
 - **Slower:** Tor routes through multiple nodes, adding latency (typically 1-3 seconds slower)
-- **IP Leaks:** Your BirdNET-Pi is still discoverable if you expose your actual IP elsewhere
-- **Not Anonymous by Default:** Tor hides *visitors*, not the server. Your clearnet interface (HTTP/HTTPS) is separate
-- **Onion Address Permanence:** Not a limitation but a feature. .onion address will change if you disable and re-enable the tor exposure.
+- **Public application data:** BirdNET-Pi pages, recordings, metadata, hostnames, and linked resources can still reveal identifying information
+- **Existing LAN/clearnet access:** Enabling Tor does not disable BirdNET-Pi's normal network interface
+- **Address secrecy is not access control:** Anyone who learns the onion address can connect; configure BirdNET-Pi authentication for sensitive installations
+- **Onion identity backup:** The private keys in `/var/lib/tor/birdnet_hidden_service/` control the address and must remain secret
 
 ### Best Practices
 
@@ -106,19 +114,16 @@ The address appears in the **Tor Hosting** section under Advanced Settings, and 
    ```bash
    sudo apt-get update && sudo apt-get upgrade tor
    ```
+   Tor 0.4.8 or newer supports proof-of-work protection for onion services. BirdNET-Pi enables it automatically when the installed Tor build supports it. Check with `tor --version` and use a currently supported Raspberry Pi OS release.
 
 2. **Monitor Tor Logs:**
    ```bash
    sudo journalctl -u tor -f
    ```
 
-3. **Firewall:** Ensure your system firewall doesn't block Tor:
-   ```bash
-   sudo ufw allow out 9001  # Outbound to Tor directory
-   sudo ufw allow out 443   # Outbound to Tor relays
-   ```
+3. **Firewall:** Tor makes outbound connections and does not require inbound port forwarding. Avoid narrow outbound port rules because relay ports vary.
 
-4. **Don't Mix Identities:** If you want anonymity, don't access your BirdNET-Pi from the clearnet and Tor simultaneously from the same browser
+4. **Protect the dashboard:** Use BirdNET-Pi authentication. An onion service encrypts transport and hides network locations, but it does not authenticate visitors by default.
 
 ## Troubleshooting
 
@@ -186,14 +191,14 @@ This guide assumes you are running BirdNET-Pi on Raspberry Pi OS (Debian-based).
 ### BirdNET-Pi Config
 
 - **Config File:** `/etc/birdnet/birdnet.conf`
-  - `TOR_ENABLED=1` or `0` (whether Tor is active)
+  - `TOR_ENABLED=1` or `0` (whether the BirdNET onion service is active)
   - `TOR_ONION="http://example1234567890abcdef.onion"` (your onion address)
 
 ### Tor Data Directory
 
 - **Hidden Service Dir:** `/var/lib/tor/birdnet_hidden_service/`
   - `hostname` – Your onion address (readable by root only)
-  - `private_key` – Your hidden service private key (DO NOT SHARE!)
+  - `hs_ed25519_secret_key` – Your onion service private identity key (DO NOT SHARE!)
   - Owned by the `debian-tor` user
 
 ## Advanced Usage
@@ -234,7 +239,7 @@ sudo cat /var/lib/tor/birdnet_ssh/hostname
 
 ### Permanent Onion Address
 
-Your onion address is tied to the private keys in `/var/lib/tor/birdnet_hidden_service/`. As long as you don't delete this directory which you will if you disable and re-enable the tor exposure, the address stays the same.
+Your onion address is tied to the private keys in `/var/lib/tor/birdnet_hidden_service/`. Normal disable/re-enable operations preserve this directory and address. The `reset` action permanently deletes the identity and creates a new address.
 
 ## Getting Help
 
@@ -249,5 +254,5 @@ sudo journalctl -u tor
 sudo journalctl -u caddy
 ```
 
-**Last Updated:** November 2025  
-**BirdNET-Pi Tor Integration v1.0**
+**Last Updated:** June 2026
+**BirdNET-Pi Tor Integration v1.1**

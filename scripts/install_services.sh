@@ -409,22 +409,10 @@ EOF
 }
 
 configure_tor_dependencies() {
-  echo "Configuring Tor service dependencies..."
-  # Create systemd override for tor@default
-  mkdir -p /etc/systemd/system/tor@default.service.d
-  cat << 'EOF' > /etc/systemd/system/tor@default.service.d/birdnet-dependencies.conf
-[Unit]
-After=caddy.service
-Wants=caddy.service
-After=php8.2-fpm.service
-Wants=php8.2-fpm.service
-After=birdnet_analysis.service
-Wants=birdnet_analysis.service
-[Service]
-ExecStartPre=/bin/sleep 13
-EOF
+  # Tor can start independently; it reconnects to Caddy when the local service is ready.
+  rm -f /etc/systemd/system/tor@default.service.d/birdnet-dependencies.conf
   systemctl daemon-reload
-  echo "Tor service dependencies configured"
+  echo "Tor uses its packaged systemd service without BirdNET-specific startup delays"
 }
 
 install_services() {

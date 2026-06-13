@@ -27,6 +27,25 @@ function service_status($name) {
       echo "<span style='color:red'>($status)</span>";
   }
 }
+
+function tor_service_status() {
+  // Report BirdNET's onion service state separately from the shared Tor daemon.
+  $config = get_config();
+  $tor_enabled = isset($config['TOR_ENABLED']) && $config['TOR_ENABLED'] == 1;
+  $service_configured = file_exists('/etc/tor/torrc.d/birdnet.conf');
+  $tor_active = trim(shell_exec("sudo systemctl is-active tor@default.service 2>/dev/null"));
+  if ($tor_active !== "active") {
+    $tor_active = trim(shell_exec("sudo systemctl is-active tor.service 2>/dev/null"));
+  }
+
+  if ($tor_enabled && $service_configured && $tor_active === "active") {
+    echo "<span style='color:green'>(active)</span>";
+  } elseif (!$tor_enabled && !$service_configured) {
+    echo "<span style='color:#fc6603'>(inactive)</span>";
+  } else {
+    echo "<span style='color:red'>(configuration mismatch)</span>";
+  }
+}
 ?>
 <html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -88,6 +107,13 @@ function service_status($name) {
     <button type="submit" name="submit" value="sudo systemctl restart spectrogram_viewer.service">Restart</button>
     <button type="submit" name="submit" value="sudo systemctl disable --now spectrogram_viewer.service">Disable</button>
     <button type="submit" name="submit" value="sudo systemctl enable --now spectrogram_viewer.service">Enable</button>
+  </div>
+    <h3>Tor Onion Service <?php echo tor_service_status();?></h3>
+  <div role="group" class="btn-group-center">
+    <!-- Tor actions use the helper so keys and BirdNET configuration stay consistent. -->
+    <button type="submit" name="submit" value="sudo /usr/local/bin/update_tor_service.sh disable">Disable</button>
+    <button type="submit" name="submit" value="sudo /usr/local/bin/update_tor_service.sh restart">Restart</button>
+    <button type="submit" name="submit" value="sudo /usr/local/bin/update_tor_service.sh enable">Enable</button>
   </div>
     <h3>Ram drive (!experimental!) <?php echo service_status(get_service_mount_name());?></h3>
   <div role="group" class="btn-group-center">

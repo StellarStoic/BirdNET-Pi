@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Helper to enable/disable Tor hidden service for BirdNET-Pi
-# Usage: update_tor_service.sh enable|disable
-# Exit codes: 0=success, 1=error, 2=bad usage
+# Manage the BirdNET-Pi Tor onion service without disturbing other Tor services.
+# Usage: update_tor_service.sh enable|disable|restart|reset
+
+set -Eeuo pipefail
+umask 077
 
 ACTION="${1:-}"
+TOR_USER="debian-tor"
+TORRC="/etc/tor/torrc"
 TORRC_DIR="/etc/tor/torrc.d"
 TORRC_FILE="$TORRC_DIR/birdnet.conf"
 HS_DIR="/var/lib/tor/birdnet_hidden_service"
 CONFIG_FILE="/etc/birdnet/birdnet.conf"
-LOG_FILE="/tmp/tor_service_${ACTION}_$$.log"
-
-# Redirect output to log file for debugging
-exec 1> >(tee -a "$LOG_FILE")
-exec 2>&1
+LOCK_FILE="/run/lock/birdnet-tor.lock"
+LOG_DIR="/var/log/birdnet"
+LOG_FILE=""
 
 log_error() {
   echo "[ERROR] $*" >&2
@@ -22,265 +24,290 @@ log_info() {
   echo "[INFO] $*"
 }
 
-check_systemd() {
-  if ! command -v systemctl >/dev/null 2>&1; then
-    log_error "systemd not found. This system may not support 'systemctl restart tor'"
-    return 1
+require_root() {
+  # Package, Tor, and BirdNET configuration changes require root privileges.
+  if [ "$EUID" -ne 0 ]; then
+    log_error "Run this command with sudo."
+    exit 1
   fi
-  return 0
 }
 
-check_tor_user() {
-  # On Raspberry Pi OS (Debian), the Tor user is debian-tor
-  local tor_user="debian-tor"
-  if id "$tor_user" &>/dev/null; then
-    echo "$tor_user"
-    return 0
-  else
-    log_error "Tor user 'debian-tor' not found. Tor may not be installed correctly."
+setup_logging() {
+  # Use a root-owned log directory instead of predictable files in /tmp.
+  install -d -m 0750 "$LOG_DIR"
+  LOG_FILE=$(mktemp "$LOG_DIR/tor_service_${ACTION}_XXXXXX.log")
+  chmod 0600 "$LOG_FILE"
+  exec > >(tee -a "$LOG_FILE") 2>&1
+}
+
+acquire_lock() {
+  # Prevent overlapping UI requests from racing on Tor's keys and config.
+  exec 9>"$LOCK_FILE"
+  if ! flock -n 9; then
+    log_error "Another Tor configuration operation is already running."
     return 1
   fi
+}
+
+cleanup_old_logs() {
+  # Keep the most recent three logs for this action.
+  mapfile -t old_logs < <(
+    find "$LOG_DIR" -maxdepth 1 -type f -name "tor_service_${ACTION}_*.log" \
+      -printf '%T@ %p\n' | sort -rn | tail -n +4 | cut -d' ' -f2-
+  )
+  if [ "${#old_logs[@]}" -gt 0 ]; then
+    rm -f -- "${old_logs[@]}"
+  fi
+}
+
+check_requirements() {
+  # Fail with a clear message when this is not a supported Debian/systemd host.
+  for command_name in apt-get flock systemctl; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      log_error "Required command not found: $command_name"
+      return 1
+    fi
+  done
 }
 
 install_tor() {
-  log_info "Checking/installing Tor..."
-  
+  # Install Tor from the configured Debian repositories when it is absent.
   if command -v tor >/dev/null 2>&1; then
-    log_info "Tor is already installed"
     return 0
   fi
-  
-  log_info "Installing Tor via apt-get..."
-  apt-get update -qq 2>&1 | grep -i "get\|update" || true
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tor 2>&1 | tail -5 || {
-    log_error "Failed to install Tor via apt-get"
-    return 1
-  }
-  
-  log_info "Tor installed successfully"
-  return 0
+
+  log_info "Installing Tor..."
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y tor
 }
 
-enable_tor_service() {
-  log_info "Enabling Tor hidden service..."
-  cleanup_old_logs "enable"
-  
-  install_tor || return 1
-  check_systemd || return 1
-
-  # Ensure Tor service is running
-  log_info "Starting Tor service..."
-  if ! systemctl start tor@default 2>/dev/null; then
-    log_error "Failed to start Tor service"
+check_tor_user() {
+  # Raspberry Pi OS and Debian packages run Tor as debian-tor.
+  if ! id "$TOR_USER" >/dev/null 2>&1; then
+    log_error "Tor user '$TOR_USER' was not created by the Tor package."
     return 1
   fi
+}
 
-  local tor_user
-  tor_user=$(check_tor_user) || return 1
-  
-  # Ensure /var/lib/tor exists and has correct permissions
-  log_info "Ensuring /var/lib/tor exists with correct permissions..."
-  mkdir -p /var/lib/tor
-  chown -R "$tor_user:$tor_user" /var/lib/tor 2>/dev/null || {
-    log_error "Failed to set ownership of /var/lib/tor"
-    return 1
-  }
-  chmod 0755 /var/lib/tor 2>/dev/null || {
-    log_error "Failed to set permissions on /var/lib/tor"
-    return 1
-  }
-  
-  mkdir -p "$TORRC_DIR"
-  mkdir -p "$HS_DIR"
-
-  # Ensure tor reads /etc/tor/torrc.d/*.conf by including it in /etc/tor/torrc if missing
-  # Detect Tor version to use correct include syntax
-  local tor_version
-  tor_version=$(/usr/bin/tor --version 2>&1 | sed -n 's/Tor version \([0-9.]*\).*/\1/p')
-  local include_directive="%include"
-  
-  # Tor 0.4.8+ supports Include; older versions need %include
-  if [ -n "$tor_version" ]; then
-    if [[ "$tor_version" > "0.4.8" ]] || [[ "$tor_version" == "0.4.8" ]]; then
-      include_directive="Include"
-      log_info "Tor version $tor_version detected, using Include directive"
-    else
-      log_info "Tor version $tor_version detected, using %include directive"
-    fi
+ensure_torrc_include() {
+  # Debian uses Tor's documented %include syntax for drop-in configuration.
+  install -d -m 0755 "$TORRC_DIR"
+  if grep -Eq '^[[:space:]]*%include[[:space:]]+/etc/tor/torrc\.d/(\*|\*\.conf)[[:space:]]*$' "$TORRC" 2>/dev/null; then
+    return 0
   fi
 
-  if ! grep -qF "$include_directive /etc/tor/torrc.d/*.conf" /etc/tor/torrc 2>/dev/null; then
-    log_info "Adding $include_directive directive to /etc/tor/torrc"
-    # Use echo instead of printf for better reliability
-    echo "" >> /etc/tor/torrc
-    echo "$include_directive /etc/tor/torrc.d/*.conf" >> /etc/tor/torrc
-    
-    # Verify the addition was successful
-    if ! grep -qF "$include_directive /etc/tor/torrc.d/*.conf" /etc/tor/torrc 2>/dev/null; then
-      log_error "Failed to add include directive to /etc/tor/torrc"
-      return 1
-    fi
-  fi
-  
-  log_info "Writing Tor configuration to $TORRC_FILE"
-  cat <<EOF > "$TORRC_FILE"
+  log_info "Adding the Tor drop-in include to $TORRC"
+  printf '\n%%include /etc/tor/torrc.d/*.conf\n' >> "$TORRC"
+}
+
+write_tor_config() {
+  # Stage the service config atomically so Tor never reads a partial file.
+  local temporary_file
+  temporary_file=$(mktemp "$TORRC_DIR/.birdnet.conf.XXXXXX")
+  cat > "$temporary_file" <<EOF
+# BirdNET-Pi v3 onion service. Managed by update_tor_service.sh.
 HiddenServiceDir $HS_DIR
 HiddenServiceVersion 3
 HiddenServicePort 80 127.0.0.1:80
 EOF
-  
-  log_info "Setting permissions on $HS_DIR (owner: $tor_user)"
-  chown -R "$tor_user:$tor_user" "$HS_DIR" 2>/dev/null || {
-    log_error "Failed to set ownership of $HS_DIR"
-    return 1
-  }
-  chmod 0700 "$HS_DIR" 2>/dev/null || {
-    log_error "Failed to set permissions on $HS_DIR"
-    return 1
-  }
 
-  # Before restarting Tor, verify the configuration is valid
+  # Tor 0.4.8+ can automatically raise proof-of-work effort during overload.
+  if tor --list-torrc-options 2>/dev/null | grep -qx "HiddenServicePoWDefensesEnabled"; then
+    echo "HiddenServicePoWDefensesEnabled 1" >> "$temporary_file"
+  fi
+
+  chmod 0644 "$temporary_file"
+  mv -f "$temporary_file" "$TORRC_FILE"
+}
+
+verify_tor_config() {
+  # Verify as Tor's service account so key-directory permissions match runtime.
   log_info "Verifying Tor configuration..."
-  # Run verification as the Tor user to avoid permission conflicts
-  if ! sudo -u debian-tor tor --verify-config >/dev/null 2>&1; then
-    log_error "Tor configuration verification failed"
-    log_error "Please check /etc/tor/torrc for syntax errors"
+  if ! runuser -u "$TOR_USER" -- tor --verify-config -f "$TORRC"; then
+    log_error "Tor rejected the configuration."
     return 1
   fi
-  
-  log_info "Restarting Tor daemon..."
-  # Stop any running Tor instances
-  pkill -SIGTERM tor 2>/dev/null || true
-  sleep 1
-  
-  # # Enable and start the tor@default instance (actual Tor daemon)
-  # log_info "Starting Tor daemon with tor@default service..."
-  # systemctl daemon-reload 2>/dev/null || true
-  # systemctl enable tor@default >/dev/null 2>&1 || true
-  # systemctl restart tor@default 2>&1 | tail -3 || {
-  #   log_info "Note: tor@default may not exist; trying standard tor service"
-  #   systemctl restart tor 2>&1 | tail -3 || true
-  # }
-  
-  # Give Tor time to initialize and create the hidden service
-  log_info "Waiting for Tor daemon to initialize..."
-  sleep 3
+}
 
-  # Single restart after configuration is complete
-  log_info "Restarting Tor service to apply hidden service configuration..."
-  if ! systemctl restart tor@default 2>/dev/null; then
-    log_info "Note: tor@default may not exist; trying standard tor service"
-    if ! systemctl restart tor 2>/dev/null; then
-      log_error "Failed to restart Tor service"
-      return 1
-    fi
+restart_tor() {
+  # Restart only through systemd; never signal unrelated Tor processes.
+  log_info "Restarting Tor..."
+  if systemctl restart tor@default.service 2>/dev/null; then
+    return 0
   fi
-  
-  # Wait for hostname generation
-  log_info "Waiting for Tor hidden service hostname to be generated..."
-  local HOSTNAME=""
-  for i in {1..60}; do
-    if [ -f "$HS_DIR/hostname" ]; then
-      HOSTNAME=$(cat "$HS_DIR/hostname" | tr -d '\n')
-      log_info "Success! Hostname file found on attempt $i"
-      break
-    fi
-    if [ $((i % 5)) -eq 0 ]; then
-      log_info "Attempt $i/60: waiting for hostname..."
+  systemctl restart tor.service
+}
+
+wait_for_hostname() {
+  # Wait for Tor to create and publish the v3 onion identity.
+  local hostname=""
+  local attempt
+  for attempt in $(seq 1 60); do
+    if [ -s "$HS_DIR/hostname" ]; then
+      hostname=$(tr -d '\r\n' < "$HS_DIR/hostname")
+      if [[ "$hostname" =~ ^[a-z2-7]{56}\.onion$ ]]; then
+        printf '%s\n' "$hostname"
+        return 0
+      fi
     fi
     sleep 1
   done
-  
-  if [ -z "$HOSTNAME" ]; then
-    log_error "Tor hidden service hostname not found after 60 seconds"
-    log_error "Tor may not have started correctly. Checking status..."
-    log_error "$(systemctl status tor@default 2>&1 || systemctl status tor 2>&1)"
-    log_error "Directory contents: $(ls -la $HS_DIR 2>&1 || echo 'Directory not readable')"
-    return 1
-  fi
-  
-  log_info "Persisting Tor settings to $CONFIG_FILE"
-  if grep -q "^TOR_ENABLED=" "$CONFIG_FILE" 2>/dev/null; then
-    sed -i "s|^TOR_ENABLED=.*|TOR_ENABLED=1|" "$CONFIG_FILE"
-  else
-    echo "TOR_ENABLED=1" >> "$CONFIG_FILE"
-  fi
-  
-  if grep -q "^TOR_ONION=" "$CONFIG_FILE" 2>/dev/null; then
-    sed -i "s|^TOR_ONION=.*|TOR_ONION=\"http://$HOSTNAME\"|" "$CONFIG_FILE"
-  else
-    echo "TOR_ONION=\"http://$HOSTNAME\"" >> "$CONFIG_FILE"
-  fi
-  
-  log_info "Tor hidden service enabled successfully"
-  log_info "Onion address: http://$HOSTNAME"
-  return 0
+
+  log_error "A valid v3 onion hostname was not generated within 60 seconds."
+  systemctl --no-pager --full status tor@default.service 2>&1 || \
+    systemctl --no-pager --full status tor.service 2>&1 || true
+  return 1
 }
 
-cleanup_old_logs() {
-  # Keep only the last 3 log files for each action type
-  local action="$1"
-  local keep_count=3
-  
-  ls -t /tmp/tor_service_${action}_*.log 2>/dev/null | tail -n +$((keep_count + 1)) | xargs rm -f 2>/dev/null || true
+set_config_value() {
+  # Rewrite a BirdNET setting while preserving a possible config-file symlink.
+  local key="$1"
+  local value="$2"
+  local temporary_file
+  temporary_file=$(mktemp)
+
+  if [ -f "$CONFIG_FILE" ]; then
+    grep -v "^${key}=" "$CONFIG_FILE" > "$temporary_file" || true
+  fi
+  printf '%s=%s\n' "$key" "$value" >> "$temporary_file"
+  cat "$temporary_file" > "$CONFIG_FILE"
+  rm -f "$temporary_file"
+}
+
+remove_config_value() {
+  # Remove a BirdNET setting while preserving a possible config-file symlink.
+  local key="$1"
+  local temporary_file
+  temporary_file=$(mktemp)
+
+  if [ -f "$CONFIG_FILE" ]; then
+    grep -v "^${key}=" "$CONFIG_FILE" > "$temporary_file" || true
+    cat "$temporary_file" > "$CONFIG_FILE"
+  fi
+  rm -f "$temporary_file"
+}
+
+enable_tor_service() {
+  # Configure Tor transactionally and only report enabled after keys exist.
+  local backup_file=""
+  local hostname
+
+  install_tor
+  check_tor_user
+  ensure_torrc_include
+
+  if [ -f "$TORRC_FILE" ]; then
+    backup_file=$(mktemp)
+    cp -a "$TORRC_FILE" "$backup_file"
+  fi
+
+  write_tor_config
+  if ! verify_tor_config; then
+    if [ -n "$backup_file" ]; then
+      cp -a "$backup_file" "$TORRC_FILE"
+    else
+      rm -f "$TORRC_FILE"
+    fi
+    rm -f "$backup_file"
+    return 1
+  fi
+
+  if ! restart_tor || ! hostname=$(wait_for_hostname); then
+    log_error "Restoring the previous Tor configuration."
+    if [ -n "$backup_file" ]; then
+      cp -a "$backup_file" "$TORRC_FILE"
+    else
+      rm -f "$TORRC_FILE"
+    fi
+    restart_tor || true
+    rm -f "$backup_file"
+    return 1
+  fi
+  rm -f "$backup_file"
+
+  set_config_value "TOR_ENABLED" "1"
+  set_config_value "TOR_ONION" "\"http://$hostname\""
+
+  log_info "Tor onion service enabled: http://$hostname"
 }
 
 disable_tor_service() {
-  log_info "Disabling Tor hidden service..."
-  
-  check_systemd || return 1
-  
+  # Disable BirdNET's onion service but retain its keys and stable address.
+  local backup_file=""
   if [ -f "$TORRC_FILE" ]; then
-    log_info "Removing Tor configuration $TORRC_FILE"
-    rm -f "$TORRC_FILE"
+    backup_file=$(mktemp)
+    cp -a "$TORRC_FILE" "$backup_file"
   fi
 
-  # Remove hidden service directory to ensure new keys on re-enable
-  if [ -d "$HS_DIR" ]; then
-    log_info "Removing hidden service directory for key regeneration"
-    rm -rf "$HS_DIR"
+  rm -f "$TORRC_FILE"
+  if ! verify_tor_config || ! restart_tor; then
+    log_error "Restoring the previous Tor configuration."
+    if [ -n "$backup_file" ]; then
+      cp -a "$backup_file" "$TORRC_FILE"
+      restart_tor || true
+    fi
+    rm -f "$backup_file"
+    return 1
   fi
+  rm -f "$backup_file"
 
-  log_info "Stopping Tor service..."
-  if systemctl stop tor@default 2>/dev/null; then
-    log_info "Tor service stopped successfully"
-  else
-    log_error "Warning: Failed to stop Tor service"
-  fi
-  
-  log_info "Removing Tor settings from $CONFIG_FILE"
-  if [ -f "$CONFIG_FILE" ]; then
-    sed -i "/^TOR_ENABLED=/d" "$CONFIG_FILE" 2>/dev/null || true
-    sed -i "/^TOR_ONION=/d" "$CONFIG_FILE" 2>/dev/null || true
-  fi
-  
-  log_info "Tor hidden service disabled successfully"
-  return 0
+  set_config_value "TOR_ENABLED" "0"
+
+  log_info "Tor onion service disabled. Its identity was preserved."
 }
 
-if [ -z "$ACTION" ]; then
-  cat <<EOF >&2
-Usage: $0 enable|disable
-  enable   - Install Tor and enable hidden service
-  disable  - Disable hidden service
-  
-Log file: $LOG_FILE
-EOF
-  exit 2
-fi
+restart_tor_service() {
+  # Restart only an already-configured BirdNET onion service.
+  local hostname
 
-# To this:
-case "$ACTION" in
-  enable)
-    enable_tor_service
-    exit $?
-    ;;
-  disable)
-    disable_tor_service
-    exit $?
-    ;;
-  *)
-    log_error "Unknown action: $ACTION"
-    exit 2
-    ;;
-esac
+  install_tor
+  check_tor_user
+  if [ ! -f "$TORRC_FILE" ]; then
+    log_error "The BirdNET onion service is disabled. Enable it before restarting."
+    return 1
+  fi
+
+  verify_tor_config
+  restart_tor
+  hostname=$(wait_for_hostname)
+  set_config_value "TOR_ENABLED" "1"
+  set_config_value "TOR_ONION" "\"http://$hostname\""
+
+  log_info "Tor onion service restarted: http://$hostname"
+}
+
+reset_tor_service() {
+  # Explicitly destroy the old identity, then generate and enable a new one.
+  rm -f "$TORRC_FILE"
+  verify_tor_config
+  restart_tor
+  rm -rf -- "$HS_DIR"
+  remove_config_value "TOR_ONION"
+  enable_tor_service
+}
+
+main() {
+  # Validate the request before creating logs or changing the host.
+  case "$ACTION" in
+    enable|disable|restart|reset) ;;
+    *)
+      echo "Usage: $0 enable|disable|restart|reset" >&2
+      exit 2
+      ;;
+  esac
+
+  require_root
+  setup_logging
+  acquire_lock
+  cleanup_old_logs
+  check_requirements
+
+  case "$ACTION" in
+    enable) enable_tor_service ;;
+    disable) disable_tor_service ;;
+    restart) restart_tor_service ;;
+    reset) reset_tor_service ;;
+  esac
+}
+
+main "$@"

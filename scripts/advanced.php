@@ -223,18 +223,7 @@ if (isset($_GET["max_files_species"])) {
     $contents = preg_replace("/RAW_SPECTROGRAM=.*/", "RAW_SPECTROGRAM=0", $contents);
   }
   
-  // Tor hidden service enable/disable
-  if (isset($_GET["enable_tor"])) {
-    $enable_tor = 1;
-    if (!isset($config['TOR_ENABLED']) || $config['TOR_ENABLED'] != 1) {
-      $contents = preg_replace("/TOR_ENABLED=.*/", "TOR_ENABLED=1", $contents);
-    }
-  } else {
-    // mark tor disabled in config contents
-    if (isset($config['TOR_ENABLED']) && $config['TOR_ENABLED'] == 1) {
-      $contents = preg_replace("/TOR_ENABLED=.*/", "TOR_ENABLED=0", $contents);
-    }
-  }
+  // The privileged helper updates TOR_* only after Tor applies the change.
 
   if(isset($_GET["rare_species_threshold"])) {
     $rare_species_threshold = $_GET["rare_species_threshold"];
@@ -301,10 +290,10 @@ if (isset($_GET["max_files_species"])) {
 
   if ($tor_changed) {
       if ($wants_tor) {
-          // enable asynchronously
+          // Run asynchronously so the settings request does not exceed PHP's timeout.
           exec('sudo bash ' . escapeshellarg($tor_script) . ' enable > /dev/null 2>&1 &');
       } else {
-          // disable asynchronously
+          // Keep the last known state until the helper confirms Tor was disabled.
           exec('sudo bash ' . escapeshellarg($tor_script) . ' disable > /dev/null 2>&1 &');
       }
   }
@@ -385,7 +374,7 @@ $newconfig = get_config();
           <input type="text" id="onionAddress" value="<?php print($newconfig['TOR_ONION']);?>" readonly>
           <button id="onioncopybtn" type="button" onclick="var el = document.getElementById('onionAddress'); el.select(); try { document.execCommand('copy'); alert('✅ Address copied!'); } catch(e) { alert('Please manually copy: ' + el.value); }">Copy</button>
         </p>
-        <p><small style="color: gray;">To change the address, disable the Tor settings → save settings → reenable Tor → you'll get new .onion address.</small></p>
+        <p><small style="color: gray;">Disabling Tor preserves this address. To intentionally replace it, run <code>sudo update_tor_service.sh reset</code>.</small></p>
       <?php } else { ?>
         <p><small>No onion address configured. Enable Tor by checking the checkbox and save settings to generate one.</small></p>
         <p><small>If you see no changes, please refresh the page.</small></p>
