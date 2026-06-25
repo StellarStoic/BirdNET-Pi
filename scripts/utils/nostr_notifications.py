@@ -83,21 +83,23 @@ def should_send_nostr(com_name, settings_dict):
 async def send_nip17_dm(sender_nsec, recipient_npub, relays, message):
     # Use nostr-sdk for NIP-17/NIP-44/NIP-59 crypto and relay publishing.
     try:
-        from nostr_sdk import Client, Keys, PublicKey
+        from nostr_sdk import Client, Keys, NostrSigner, PublicKey, RelayUrl
     except ImportError as exc:
         raise RuntimeError("nostr-sdk is not installed in the BirdNET-Pi virtualenv") from exc
 
     keys = Keys.parse(sender_nsec)
+    signer = NostrSigner.keys(keys)
     recipient = PublicKey.parse(recipient_npub)
-    client = Client(keys)
+    relay_urls = [RelayUrl.parse(relay) for relay in relays]
+    client = Client(signer)
 
-    for relay in relays:
+    for relay in relay_urls:
         await client.add_relay(relay)
 
     await client.connect()
     try:
         # send_private_msg_to sends a NIP-17 private message to specific relays.
-        await client.send_private_msg_to(relays, recipient, message, [])
+        await client.send_private_msg_to(relay_urls, recipient, message, [])
     finally:
         await client.shutdown()
 

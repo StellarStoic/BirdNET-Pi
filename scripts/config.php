@@ -327,6 +327,7 @@ if(isset($_GET['sendtest']) && $_GET['sendtest'] == "true") {
 
 if(isset($_GET['sendnostrtest']) && $_GET['sendnostrtest'] == "true") {
   ensure_nostr_sdk($home, $user);
+  $response_code = 0;
   $recipient = $_GET['nostr_dm_recipient_npub'] ?? "";
   $sender = $_GET['nostr_dm_sender_nsec'] ?? "";
   $relays = $_GET['nostr_dm_relays'] ?? "";
@@ -342,7 +343,11 @@ if(isset($_GET['sendnostrtest']) && $_GET['sendnostrtest'] == "true") {
     " --title " . escapeshellarg($title) .
     " --body " . escapeshellarg($body) .
     " 2>&1";
-  $ret = shell_exec($cmd);
+  exec($cmd, $output, $response_code);
+  $ret = implode("\n", $output);
+  if ($response_code !== 0) {
+    http_response_code(500);
+  }
   echo "<pre class=\"bash\">".htmlspecialchars($ret, ENT_QUOTES | ENT_SUBSTITUTE)."</pre>";
   die();
 }
@@ -486,8 +491,12 @@ function sendNostrTestNotification(e) {
 
   var xmlHttp = new XMLHttpRequest();
   xmlHttp.onreadystatechange = function() {
-    if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
-      document.getElementById("nostrtestmsg").innerHTML = this.responseText + " Test sent! Make sure to <b>Update Settings</b> below.";
+    if (xmlHttp.readyState == 4) {
+      if (xmlHttp.status == 200) {
+        document.getElementById("nostrtestmsg").innerHTML = this.responseText + " Test sent! Make sure to <b>Update Settings</b> below.";
+      } else {
+        document.getElementById("nostrtestmsg").innerHTML = this.responseText + " Test failed. Check the error above.";
+      }
       e.classList.remove("disabled");
     }
   }
