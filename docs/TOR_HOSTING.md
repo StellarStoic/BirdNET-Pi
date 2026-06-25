@@ -58,6 +58,7 @@ EOF'
 6. Wait up to 60 seconds for the onion address to be generated
 7. Reload the page; the onion address will appear
 8. If you think nothing has happened, refresh the page
+9. To replace an existing address, click **Reset onion address** in the same Tor Hosting section
 
 
 ### Usefull commands

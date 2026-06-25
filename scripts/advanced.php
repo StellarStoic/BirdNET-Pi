@@ -6,6 +6,8 @@ require_once "scripts/common.php";
 $home = get_home();
 $config = get_config();
 $user = get_user();
+$tor_changed = false;
+$tor_reset_requested = false;
 
 ensure_authenticated();
 
@@ -16,6 +18,13 @@ if (isset($_GET['run_species_count'])) {
    echo "alert(`$escaped_output`);";
    echo "</script>";
  }
+
+if (isset($_GET['reset_tor'])) {
+  // Reset only the onion identity; do not process the full settings form.
+  $tor_script = $home . "/BirdNET-Pi/scripts/update_tor_service.sh";
+  $tor_reset_requested = true;
+  exec('sudo bash ' . escapeshellarg($tor_script) . ' reset > /dev/null 2>&1 &');
+}
 
 if(isset($_GET['submit'])) {
   $contents = file_get_contents('/etc/birdnet/birdnet.conf');
@@ -281,7 +290,6 @@ if (isset($_GET["max_files_species"])) {
   $wants_tor = isset($_GET['enable_tor']) ? 1 : 0;
 
   // Only process Tor if the setting actually changed
-  $tor_changed = false;
   if ($wants_tor && !$old_tor_enabled) {
       $tor_changed = true;
   } elseif (!$wants_tor && $old_tor_enabled) {
@@ -320,6 +328,11 @@ $count = 6000;
 $newconfig = get_config();
 ?>
       <div class="brbanner"><h1>Advanced Settings</h1></div><br>
+    <form id="torResetForm" action="" method="GET">
+      <!-- This separate form resets only the Tor onion identity, not all advanced settings. -->
+      <input type="hidden" name="view" value="Advanced">
+      <input type="hidden" name="reset_tor" value="1">
+    </form>
     <form id="advancedform" action="" method="GET">
       <table class="settingstable"><tr><td>
       <h2>Privacy Threshold</h2>
@@ -374,7 +387,11 @@ $newconfig = get_config();
           <input type="text" id="onionAddress" value="<?php print($newconfig['TOR_ONION']);?>" readonly>
           <button id="onioncopybtn" type="button" onclick="var el = document.getElementById('onionAddress'); el.select(); try { document.execCommand('copy'); alert('✅ Address copied!'); } catch(e) { alert('Please manually copy: ' + el.value); }">Copy</button>
         </p>
-        <p><small style="color: gray;">Disabling Tor preserves this address. To intentionally replace it, run <code>sudo update_tor_service.sh reset</code>.</small></p>
+        <p><small style="color: gray;">Disabling Tor preserves this address. Use reset only when you intentionally want a different onion address.</small></p>
+        <p>
+          <!-- The reset button submits the dedicated Tor form so unrelated settings are not changed. -->
+          <button type="submit" form="torResetForm" onclick="return confirm('Reset the Tor onion address? The current .onion address will stop working.');">Reset onion address</button>
+        </p>
       <?php } else { ?>
         <p><small>No onion address configured. Enable Tor by checking the checkbox and save settings to generate one.</small></p>
         <p><small>If you see no changes, please refresh the page.</small></p>
@@ -401,8 +418,8 @@ $newconfig = get_config();
 
       // Check if we just performed a Tor operation and show status
       <?php 
-      if (isset($_GET['submit']) && $tor_changed) {
-        echo "showTorStatus();";
+      if ((isset($_GET['submit']) && $tor_changed) || $tor_reset_requested) {
+        echo "document.addEventListener('DOMContentLoaded', showTorStatus);";
       }
       ?>
       </script>

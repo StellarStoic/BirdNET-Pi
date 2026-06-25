@@ -98,7 +98,7 @@ To enable it from the dashboard:
 4. Save the settings and wait up to 60 seconds.
 5. Open the generated `http://...onion` address in [Tor Browser](https://www.torproject.org/download/).
 
-The Tor service can also be enabled, restarted, or disabled under **Tools > Services > Tor Onion Service**. Disabling it preserves the private identity keys, so the same onion address returns when it is enabled again.
+The Tor service can also be enabled, restarted, or disabled under **Tools > Services > Tor Onion Service**. Disabling it preserves the private identity keys, so the same onion address returns when it is enabled again. To deliberately replace the address, use **Reset onion address** in **Tools > Settings > Advanced Settings > Tor Hosting**.
 
 Command-line management is also available:
 
