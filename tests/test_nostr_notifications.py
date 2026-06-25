@@ -10,6 +10,8 @@ from tests.helpers import Settings
 class TestNostrNotifications(unittest.TestCase):
 
     def setUp(self):
+        # Reset module-level caches so each Nostr notification test starts isolated.
+        nostr_notifications.nostr_images = {}
         nostr_notifications.nostr_species_last_notified = {}
 
     def get_default_params(self):
@@ -60,6 +62,29 @@ class TestNostrNotifications(unittest.TestCase):
         self.assertIn("New BirdNET-Pi Detection", msg)
         self.assertIn("Great Crested Flycatcher", msg)
         self.assertIn("http://birdnetpi.local?filename=filename", msg)
+
+    @patch("scripts.utils.nostr_notifications.get_nostr_image_url")
+    def test_format_nostr_message_replaces_image_url(self, mock_get_image_url):
+        # Verify that $image is filled from the local image API selected by Bird Photo Source.
+        settings = self.get_enabled_settings()
+        settings["IMAGE_PROVIDER"] = "WIKIPEDIA"
+        settings["NOSTR_DM_NOTIFICATION_BODY"] = "$comname $image"
+        mock_get_image_url.return_value = "https://example.test/bird.jpg"
+
+        msg = format_nostr_message(settings, self.get_default_params(), "detection")
+
+        self.assertIn("https://example.test/bird.jpg", msg)
+        mock_get_image_url.assert_called_once()
+
+    def test_format_nostr_message_skips_image_without_photo_source(self):
+        # Keep $image blank when Bird Photo Source is disabled in settings.
+        settings = self.get_enabled_settings()
+        settings["IMAGE_PROVIDER"] = ""
+        settings["NOSTR_DM_NOTIFICATION_BODY"] = "$comname $image"
+
+        msg = format_nostr_message(settings, self.get_default_params(), "detection")
+
+        self.assertIn("Great Crested Flycatcher ", msg)
 
     @patch("scripts.utils.helpers._load_settings")
     @patch("scripts.utils.nostr_notifications.send_nostr_dm")

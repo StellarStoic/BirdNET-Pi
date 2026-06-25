@@ -142,6 +142,8 @@ Setup path:
 6. Click **Send Test Nostr DM**.
 7. Enable the notification types you want and click **Update Settings**.
 
+The Nostr DM title and body support the same detection keywords as Apprise. Use `$image` to include the current Bird Photo Source image URL in the message.
+
 Use the generated BirdNET-Pi sender key only for this device. Do not paste your personal Nostr private key (`nsec`) into BirdNET-Pi. Manual sender-key import is available only for a separate key created for this device.
 
 Please take a look at the [wiki](https://github.com/mcguirepr89/BirdNET-Pi/wiki) and [discussions](https://github.com/mcguirepr89/BirdNET-Pi/discussions) for information on

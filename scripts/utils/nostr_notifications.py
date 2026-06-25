@@ -3,10 +3,12 @@ import html
 import os
 import socket
 import time
+from urllib.parse import quote
 
 from .db import get_todays_count_for, get_this_weeks_count_for
 from .helpers import get_settings
 
+nostr_images = {}
 nostr_species_last_notified = {}
 
 
@@ -19,7 +21,7 @@ def parse_relays(relays):
     ]
 
 
-def render_nostr_template(template, detection, reason, listenurl):
+def render_nostr_template(template, detection, reason, listenurl, image_url=""):
     # Replace BirdNET-Pi notification variables with this detection's values.
     friendlyurl = f"[Listen here]({listenurl})"
     replacements = {
@@ -38,11 +40,33 @@ def render_nostr_template(template, detection, reason, listenurl):
         "$sens": str(detection["sens"]),
         "$overlap": str(detection["overlap"]),
         "$reason": reason,
+        "$image": image_url,
+        "$flickrimage": image_url,
     }
     rendered = template
     for key, value in replacements.items():
         rendered = rendered.replace(key, value)
     return rendered
+
+
+def get_nostr_image_url(settings_dict, detection):
+    # Fetch the selected Bird Photo Source image URL through BirdNET-Pi's local image API.
+    if not settings_dict.get("IMAGE_PROVIDER"):
+        return ""
+
+    import requests
+
+    com_name = detection["com_name"]
+    if com_name not in nostr_images:
+        try:
+            sci_name = quote(detection["sci_name"])
+            response = requests.get(url=f"http://localhost/api/v1/image/{sci_name}", timeout=10)
+            response.raise_for_status()
+            nostr_images[com_name] = response.json().get("data", {}).get("image_url", "")
+        except Exception as e:
+            print("NOSTR IMAGE API ERROR:", e)
+            nostr_images[com_name] = ""
+    return nostr_images.get(com_name, "")
 
 
 def should_send_nostr(com_name, settings_dict):
@@ -118,9 +142,10 @@ def format_nostr_message(settings_dict, detection, reason):
     listenurl = f"{websiteurl}?filename={detection['path']}"
     title = html.unescape(settings_dict.get("NOSTR_DM_NOTIFICATION_TITLE", "New BirdNET-Pi Detection")).replace("\\n", "\n")
     body = html.unescape(settings_dict.get("NOSTR_DM_NOTIFICATION_BODY", "A $comname ($sciname) was detected with $confidencepct% confidence ($reason)")).replace("\\n", "\n")
+    image_url = get_nostr_image_url(settings_dict, detection) if "$image" in title or "$image" in body or "$flickrimage" in title or "$flickrimage" in body else ""
     return (
-        f"{render_nostr_template(title, detection, reason, listenurl)}\n\n"
-        f"{render_nostr_template(body, detection, reason, listenurl)}"
+        f"{render_nostr_template(title, detection, reason, listenurl, image_url)}\n\n"
+        f"{render_nostr_template(body, detection, reason, listenurl, image_url)}"
     )
 
 

@@ -769,7 +769,7 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
 
       <hr>
       <h3>Message Template</h3>
-      <p><small>Nostr DM title and body use the same template keywords as Apprise, including <code>$sciname</code>, <code>$comname</code>, <code>$confidence</code>, <code>$confidencepct</code>, <code>$listenurl</code>, <code>$friendlyurl</code>, <code>$date</code>, <code>$time</code>, <code>$week</code>, <code>$latitude</code>, <code>$longitude</code>, <code>$cutoff</code>, <code>$sens</code>, <code>$overlap</code>, and <code>$reason</code>.</small></p>
+      <p><small>Nostr DM title and body use the same template keywords as Apprise, including <code>$sciname</code>, <code>$comname</code>, <code>$confidence</code>, <code>$confidencepct</code>, <code>$listenurl</code>, <code>$friendlyurl</code>, <code>$image</code> for the selected Bird Photo Source image URL, <code>$date</code>, <code>$time</code>, <code>$week</code>, <code>$latitude</code>, <code>$longitude</code>, <code>$cutoff</code>, <code>$sens</code>, <code>$overlap</code>, and <code>$reason</code>.</small></p>
       <label for="nostr_dm_notification_title">Nostr DM title: </label>
       <input name="nostr_dm_notification_title" style="width: 100%" type="text" value="<?php print(config_text($config, 'NOSTR_DM_NOTIFICATION_TITLE', 'New BirdNET-Pi Detection'));?>" /><br>
       <label for="nostr_dm_notification_body">Nostr DM body: </label>
