@@ -137,12 +137,12 @@ Setup path:
 1. Open **Tools > Settings**.
 2. Find **Nostr Direct Messages**.
 3. Enter your recipient `npub`.
-4. Click **Generate BirdNET-Pi sender key**.
+4. Click **Generate BirdNET-Pi sender key**. The UI shows the sender `npub` and keeps the sender `nsec` hidden by default.
 5. Set 1-3 NIP-17 inbox relays used by your Nostr client.
 6. Click **Send Test Nostr DM**.
 7. Enable the notification types you want and click **Update Settings**.
 
-Use the generated BirdNET-Pi sender key only for this device. Do not paste your personal Nostr `nsec` into BirdNET-Pi.
+Use the generated BirdNET-Pi sender key only for this device. Do not paste your personal Nostr `nsec` into BirdNET-Pi. Manual sender-key import is available only for a separate key created for this device.
 
 Please take a look at the [wiki](https://github.com/mcguirepr89/BirdNET-Pi/wiki) and [discussions](https://github.com/mcguirepr89/BirdNET-Pi/discussions) for information on
 - [BirdNET-Pi's Deep Convolutional Neural Network(s)](https://github.com/mcguirepr89/BirdNET-Pi/wiki/BirdNET-Pi:-some-theory-on-classification-&-some-practical-hints)

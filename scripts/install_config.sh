@@ -113,6 +113,7 @@ APPRISE_ONLY_NOTIFY_SPECIES_NAMES_2=""
 NOSTR_DM_ENABLED=0
 NOSTR_DM_RECIPIENT_NPUB=""
 NOSTR_DM_SENDER_NSEC=""
+NOSTR_DM_SENDER_NPUB=""
 NOSTR_DM_RELAYS="wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net"
 NOSTR_DM_NOTIFICATION_TITLE="New BirdNET-Pi Detection"
 NOSTR_DM_NOTIFICATION_BODY="A \$comname (\$sciname) was detected with \$confidencepct% confidence (\$reason)"

@@ -52,6 +52,20 @@ function quoted_config_value($value) {
   return '"' . str_replace('"', '', $value) . '"';
 }
 
+function ensure_nostr_sdk($home, $user) {
+  // Install nostr-sdk into the BirdNET-Pi virtualenv when an older update missed it.
+  $python = escapeshellarg($home."/BirdNET-Pi/birdnet/bin/python3");
+  $pip = escapeshellarg($home."/BirdNET-Pi/birdnet/bin/pip3");
+  $check = "sudo -u " . escapeshellarg($user) . " $python -c " . escapeshellarg("import nostr_sdk") . " 2>&1";
+  $output = shell_exec($check);
+  if (strlen(trim($output)) === 0) {
+    return "";
+  }
+
+  $install = "sudo -u " . escapeshellarg($user) . " $pip install nostr-sdk==0.44.1 2>&1";
+  return shell_exec($install);
+}
+
 function syslog_shell_exec($cmd, $sudo_user = null) {
   if ($sudo_user) {
     $cmd = "sudo -u $sudo_user $cmd";
@@ -83,7 +97,20 @@ if(isset($_GET['restart_php']) && $_GET['restart_php'] == "true") {
 }
 
 if(isset($_GET['generate_nostr_key']) && $_GET['generate_nostr_key'] == "true") {
+  ensure_nostr_sdk($home, $user);
   $cmd = "sudo -u " . escapeshellarg($user) . " " . escapeshellarg($home."/BirdNET-Pi/birdnet/bin/python3") . " " . escapeshellarg($home."/BirdNET-Pi/scripts/generate_nostr_key.py") . " 2>&1";
+  header('Content-Type: application/json');
+  echo shell_exec($cmd);
+  die();
+}
+
+if(isset($_GET['derive_nostr_npub']) && $_GET['derive_nostr_npub'] == "true") {
+  ensure_nostr_sdk($home, $user);
+  $sender = $_GET['nostr_dm_sender_nsec'] ?? "";
+  $cmd = "sudo -u " . escapeshellarg($user) . " " .
+    escapeshellarg($home."/BirdNET-Pi/birdnet/bin/python3") . " " .
+    escapeshellarg($home."/BirdNET-Pi/scripts/generate_nostr_key.py") .
+    " --public-from-nsec " . escapeshellarg($sender) . " 2>&1";
   header('Content-Type: application/json');
   echo shell_exec($cmd);
   die();
@@ -103,6 +130,7 @@ if(isset($_GET["latitude"])){
   $minimum_time_limit = $_GET['minimum_time_limit'];
   $nostr_dm_recipient_npub = trim($_GET['nostr_dm_recipient_npub'] ?? "");
   $nostr_dm_sender_nsec = trim($_GET['nostr_dm_sender_nsec'] ?? "");
+  $nostr_dm_sender_npub = trim($_GET['nostr_dm_sender_npub'] ?? "");
   $nostr_dm_relays = trim($_GET['nostr_dm_relays'] ?? "");
   $nostr_dm_notification_title = $_GET['nostr_dm_notification_title'] ?? "";
   $nostr_dm_notification_body = htmlspecialchars_decode($_GET['nostr_dm_notification_body'] ?? "", ENT_QUOTES);
@@ -224,6 +252,7 @@ if(isset($_GET["latitude"])){
   $contents = set_config_line($contents, "NOSTR_DM_ENABLED", "NOSTR_DM_ENABLED=$nostr_dm_enabled");
   $contents = set_config_line($contents, "NOSTR_DM_RECIPIENT_NPUB", "NOSTR_DM_RECIPIENT_NPUB=" . quoted_config_value($nostr_dm_recipient_npub));
   $contents = set_config_line($contents, "NOSTR_DM_SENDER_NSEC", "NOSTR_DM_SENDER_NSEC=" . quoted_config_value($nostr_dm_sender_nsec));
+  $contents = set_config_line($contents, "NOSTR_DM_SENDER_NPUB", "NOSTR_DM_SENDER_NPUB=" . quoted_config_value($nostr_dm_sender_npub));
   $contents = set_config_line($contents, "NOSTR_DM_RELAYS", "NOSTR_DM_RELAYS=" . quoted_config_value($nostr_dm_relays));
   $contents = set_config_line($contents, "NOSTR_DM_NOTIFICATION_TITLE", "NOSTR_DM_NOTIFICATION_TITLE=" . quoted_config_value($nostr_dm_notification_title));
   $contents = set_config_line($contents, "NOSTR_DM_NOTIFICATION_BODY", "NOSTR_DM_NOTIFICATION_BODY=" . quoted_config_value($nostr_dm_notification_body));
@@ -297,6 +326,7 @@ if(isset($_GET['sendtest']) && $_GET['sendtest'] == "true") {
 }
 
 if(isset($_GET['sendnostrtest']) && $_GET['sendnostrtest'] == "true") {
+  ensure_nostr_sdk($home, $user);
   $recipient = $_GET['nostr_dm_recipient_npub'] ?? "";
   $sender = $_GET['nostr_dm_sender_nsec'] ?? "";
   $relays = $_GET['nostr_dm_relays'] ?? "";
@@ -360,6 +390,7 @@ function sendTestNotification(e) {
 
 function generateNostrSenderKey(e) {
   document.getElementById("nostrtestmsg").innerHTML = "";
+  document.getElementById("nostr_sender_secret_status").innerText = "Installing/checking nostr-sdk and generating key...";
   e.classList.add("disabled");
 
   var xmlHttp = new XMLHttpRequest();
@@ -370,14 +401,74 @@ function generateNostrSenderKey(e) {
         try {
           var keys = JSON.parse(xmlHttp.responseText);
           document.getElementsByName("nostr_dm_sender_nsec")[0].value = keys.nsec;
+          document.getElementsByName("nostr_dm_sender_npub")[0].value = keys.npub;
           document.getElementById("nostr_sender_npub").innerText = keys.npub;
+          document.getElementById("nostr_sender_secret_status").innerText = "Sender secret is stored. It is hidden by default.";
         } catch(err) {
           document.getElementById("nostrtestmsg").innerHTML = "<pre class=\"bash\">" + xmlHttp.responseText + "</pre>";
+          document.getElementById("nostr_sender_secret_status").innerText = "Sender key generation failed.";
         }
       }
     }
   }
   xmlHttp.open("GET", "scripts/config.php?generate_nostr_key=true", true);
+  xmlHttp.send(null);
+}
+
+function showNostrSecretControls() {
+  document.getElementById("nostr_secret_controls").style.display = "block";
+}
+
+function hideNostrSecretControls() {
+  document.getElementById("nostr_secret_controls").style.display = "none";
+}
+
+function revealStoredNostrSecret() {
+  var stored = document.getElementsByName("nostr_dm_sender_nsec")[0].value;
+  var output = document.getElementById("nostr_secret_reveal");
+  if (stored === "") {
+    output.innerText = "No sender secret is stored yet.";
+  } else {
+    output.innerText = stored;
+  }
+}
+
+function importNostrSenderSecret(e) {
+  var imported = document.getElementById("nostr_sender_nsec_import").value.trim();
+  if (imported === "") {
+    alert("Paste an nsec first.");
+    return;
+  }
+  if (!imported.startsWith("nsec1")) {
+    alert("That does not look like a Nostr nsec.");
+    return;
+  }
+  if (!confirm("Import this sender nsec into BirdNET-Pi? Do not use your personal Nostr account key here.")) {
+    return;
+  }
+
+  document.getElementsByName("nostr_dm_sender_nsec")[0].value = imported;
+  document.getElementById("nostr_sender_secret_status").innerText = "Imported sender secret. Deriving public key...";
+  e.classList.add("disabled");
+
+  var params = new URLSearchParams();
+  params.set("derive_nostr_npub", "true");
+  params.set("nostr_dm_sender_nsec", imported);
+
+  var xmlHttp = new XMLHttpRequest();
+  xmlHttp.onreadystatechange = function() {
+    if (xmlHttp.readyState == 4) {
+      e.classList.remove("disabled");
+      try {
+        var keys = JSON.parse(xmlHttp.responseText);
+        document.getElementsByName("nostr_dm_sender_npub")[0].value = keys.npub || "";
+        document.getElementById("nostr_sender_npub").innerText = keys.npub || "Could not derive sender npub.";
+      } catch(err) {
+        document.getElementById("nostrtestmsg").innerHTML = "<pre class=\"bash\">" + xmlHttp.responseText + "</pre>";
+      }
+    }
+  }
+  xmlHttp.open("GET", "scripts/config.php?" + params.toString(), true);
   xmlHttp.send(null);
 }
 
@@ -644,15 +735,28 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
       </td></tr></table><br>
       <table class="settingstable" style="width:100%"><tr><td>
       <h2>Nostr Direct Messages</h2>
-      <p>Send standalone encrypted Nostr DMs using NIP-17. This does not use Apprise. Use a dedicated BirdNET-Pi sender key, not your personal Nostr private key.</p>
+      <p>Send standalone encrypted Nostr DMs using NIP-17. This does not use Apprise.</p>
+      <p><b>Security warning:</b> do not paste your personal Nostr account <code>nsec</code> here. Generate a dedicated BirdNET-Pi sender key, or import a separate sender key created only for this device.</p>
       <input type="checkbox" name="nostr_dm_enabled" <?php if(($config['NOSTR_DM_ENABLED'] ?? "0") == 1) { echo "checked"; };?> >
       <label for="nostr_dm_enabled">Enable Nostr DM notifications</label><br>
       <label for="nostr_dm_recipient_npub">Recipient npub: </label>
       <input name="nostr_dm_recipient_npub" style="width: 100%" type="text" placeholder="npub1..." value="<?php print(config_text($config, 'NOSTR_DM_RECIPIENT_NPUB'));?>" /><br>
-      <label for="nostr_dm_sender_nsec">BirdNET-Pi sender nsec: </label>
-      <input name="nostr_dm_sender_nsec" style="width: 100%" type="password" placeholder="nsec1..." value="<?php print(config_text($config, 'NOSTR_DM_SENDER_NSEC'));?>" /><br>
+      <input name="nostr_dm_sender_nsec" type="hidden" value="<?php print(config_text($config, 'NOSTR_DM_SENDER_NSEC'));?>" />
+      <input name="nostr_dm_sender_npub" type="hidden" value="<?php print(config_text($config, 'NOSTR_DM_SENDER_NPUB'));?>" />
       <button type="button" class="testbtn" onclick="generateNostrSenderKey(this)">Generate BirdNET-Pi sender key</button>
-      <p><small>Sender npub: <span id="nostr_sender_npub">Generate a key to show the sender npub.</span></small></p>
+      <button type="button" class="testbtn" onclick="showNostrSecretControls()">Import/reveal sender secret</button>
+      <p><small>Sender npub: <span id="nostr_sender_npub"><?php print(config_text($config, 'NOSTR_DM_SENDER_NPUB', 'Generate or import a key to show the sender npub.'));?></span></small></p>
+      <p><small id="nostr_sender_secret_status"><?php if(strlen($config['NOSTR_DM_SENDER_NSEC'] ?? "") > 0) { echo "Sender secret is stored. It is hidden by default."; } else { echo "No sender secret is stored yet."; } ?></small></p>
+      <div id="nostr_secret_controls" style="display:none">
+        <!-- Sender secret controls are hidden by default to discourage use of a personal nsec. -->
+        <p><b>Advanced:</b> import only a dedicated sender <code>nsec</code>, never your personal Nostr account key.</p>
+        <label for="nostr_sender_nsec_import">Import sender nsec: </label>
+        <input id="nostr_sender_nsec_import" style="width: 100%" type="password" placeholder="nsec1..." /><br>
+        <button type="button" class="testbtn" onclick="importNostrSenderSecret(this)">Import sender nsec</button>
+        <button type="button" class="testbtn" onclick="revealStoredNostrSecret()">Reveal stored sender nsec</button>
+        <button type="button" class="testbtn" onclick="hideNostrSecretControls()">Hide</button>
+        <pre id="nostr_secret_reveal" class="bash"></pre>
+      </div>
       <label for="nostr_dm_relays">NIP-17 inbox relays, one per line or comma separated:</label><br>
       <textarea class="testbtn" name="nostr_dm_relays" rows="3" type="text"><?php print(config_text($config, 'NOSTR_DM_RELAYS', 'wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net'));?></textarea>
       <p><small>Best result: use 1-3 relays where your Nostr client receives NIP-17 DMs.</small></p>
