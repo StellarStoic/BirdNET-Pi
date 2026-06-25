@@ -12,6 +12,19 @@ nostr_images = {}
 nostr_species_last_notified = {}
 
 
+def normalize_nostr_image_url(image_url):
+    # Convert cached Commons thumbnail URLs back to the original file URL when a generated thumbnail size may not render.
+    marker = "/wikipedia/commons/thumb/"
+    if marker not in image_url:
+        return image_url
+
+    path_parts = image_url.split("/")
+    if len(path_parts) < 2:
+        return image_url
+
+    return image_url.rsplit("/", 1)[0].replace(marker, "/wikipedia/commons/")
+
+
 def parse_relays(relays):
     # Normalize the user-provided relay list into websocket URLs.
     return [
@@ -62,7 +75,8 @@ def get_nostr_image_url(settings_dict, detection):
             sci_name = quote(detection["sci_name"])
             response = requests.get(url=f"http://localhost/api/v1/image/{sci_name}", timeout=10)
             response.raise_for_status()
-            nostr_images[com_name] = response.json().get("data", {}).get("image_url", "")
+            image_url = response.json().get("data", {}).get("image_url", "")
+            nostr_images[com_name] = normalize_nostr_image_url(image_url)
         except Exception as e:
             print("NOSTR IMAGE API ERROR:", e)
             nostr_images[com_name] = ""

@@ -429,7 +429,7 @@ class Wikipedia extends ImageProvider {
       return;
 
     $image_name = substr($data['originalimage']['source'], strrpos($data['originalimage']['source'], '/') + 1);
-    $metadata = $this->get_json("https://commons.wikimedia.org/w/api.php?action=query&titles=File:$image_name&prop=imageinfo&iiprop=extmetadata|size&format=json");
+    $metadata = $this->get_json("https://commons.wikimedia.org/w/api.php?action=query&titles=File:$image_name&prop=imageinfo&iiprop=extmetadata|size|url&iiurlwidth=1280&format=json");
     if ($metadata == false or !isset($metadata['query']['pages']))
       return;
 
@@ -450,8 +450,9 @@ class Wikipedia extends ImageProvider {
       } else {
         $license_url = $this->get_external_link($image_url);
       }
-      if ($page["imageinfo"][0]["width"] > 1280) {
-        $image_url = preg_replace('#/commons/#', '/commons/thumb/', $image_url) . '/1280px-'. $image_name;
+      if ($page["imageinfo"][0]["width"] > 1280 && isset($page["imageinfo"][0]["thumburl"])) {
+        // Use MediaWiki's own thumbnail URL because Commons only accepts specific rendered sizes for each file.
+        $image_url = $page["imageinfo"][0]["thumburl"];
       }
     }
 

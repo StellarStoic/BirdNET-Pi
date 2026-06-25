@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts.utils import nostr_notifications
-from scripts.utils.nostr_notifications import format_nostr_message, parse_relays, sendNostrNotifications, should_send_nostr
+from scripts.utils.nostr_notifications import format_nostr_message, normalize_nostr_image_url, parse_relays, sendNostrNotifications, should_send_nostr
 
 from tests.helpers import Settings
 
@@ -46,6 +46,13 @@ class TestNostrNotifications(unittest.TestCase):
             parse_relays("wss://relay.example, https://bad.example\nws://local.example"),
             ["wss://relay.example", "ws://local.example"]
         )
+
+    def test_normalize_nostr_image_url_rewrites_commons_thumbnail(self):
+        # Rewrite cached Commons thumbnail URLs to the original file URL when the generated size is invalid.
+        broken_thumb = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Chloris_chloris_%28profile%29.jpg/1024px-Chloris_chloris_%28profile%29.jpg"
+        expected = "https://upload.wikimedia.org/wikipedia/commons/2/29/Chloris_chloris_%28profile%29.jpg"
+
+        self.assertEqual(normalize_nostr_image_url(broken_thumb), expected)
 
     def test_should_send_nostr_requires_enabled_config(self):
         settings = Settings.with_defaults()
