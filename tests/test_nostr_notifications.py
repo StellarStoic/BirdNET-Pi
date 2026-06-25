@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts.utils import nostr_notifications
-from scripts.utils.nostr_notifications import format_nostr_message, normalize_nostr_image_url, parse_relays, sendNostrNotifications, should_send_nostr
+from scripts.utils.nostr_notifications import format_nostr_message, normalize_nostr_image_url, parse_relays, sendNostrNotifications, sendNostrOperationalNotification, should_send_nostr, should_send_nostr_operational
 
 from tests.helpers import Settings
 
@@ -61,6 +61,13 @@ class TestNostrNotifications(unittest.TestCase):
         settings = self.get_enabled_settings()
         self.assertTrue(should_send_nostr("Great Crested Flycatcher", settings))
 
+    def test_should_send_nostr_operational_requires_core_config(self):
+        settings = Settings.with_defaults()
+        self.assertFalse(should_send_nostr_operational(settings))
+
+        settings = self.get_enabled_settings()
+        self.assertTrue(should_send_nostr_operational(settings))
+
     def test_format_nostr_message(self):
         settings = self.get_enabled_settings()
         settings["BIRDNETPI_URL"] = "http://birdnetpi.local"
@@ -116,6 +123,20 @@ class TestNostrNotifications(unittest.TestCase):
         sendNostrNotifications(**self.get_default_params())
 
         self.assertEqual(mock_send.call_count, 0)
+
+    @patch("scripts.utils.helpers._load_settings")
+    @patch("scripts.utils.nostr_notifications.send_nostr_dm")
+    def test_send_nostr_operational_notification_ignores_detection_filters(self, mock_send, mock_load_settings):
+        # Operational messages use the Nostr account settings but not species notification rules.
+        settings = self.get_enabled_settings()
+        settings["NOSTR_DM_ONLY_NOTIFY_SPECIES_NAMES_2"] = "Northern Cardinal"
+        mock_load_settings.return_value = settings
+
+        sent = sendNostrOperationalNotification("Tor updated", "http://exampleonion.onion")
+
+        self.assertTrue(sent)
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertIn("http://exampleonion.onion", mock_send.call_args_list[0][0][3])
 
 
 if __name__ == "__main__":

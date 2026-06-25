@@ -15,6 +15,10 @@ CONFIG_FILE="/etc/birdnet/birdnet.conf"
 LOCK_FILE="/run/lock/birdnet-tor.lock"
 LOG_DIR="/var/log/birdnet"
 LOG_FILE=""
+BIRDNET_USER="${BIRDNET_USER:-birdnet}"
+BIRDNET_HOME="${BIRDNET_HOME:-/home/$BIRDNET_USER}"
+BIRDNET_ROOT="$BIRDNET_HOME/BirdNET-Pi"
+BIRDNET_PYTHON="$BIRDNET_ROOT/birdnet/bin/python3"
 
 log_error() {
   echo "[ERROR] $*" >&2
@@ -174,6 +178,25 @@ set_config_value() {
   rm -f "$temporary_file"
 }
 
+send_tor_nostr_notification() {
+  # Notify the configured Nostr receiver about the latest onion address without blocking Tor setup on DM failures.
+  local event="$1"
+  local onion_url="$2"
+  local notification_script="$BIRDNET_ROOT/scripts/send_tor_nostr_notification.py"
+
+  if [ ! -x "$BIRDNET_PYTHON" ] || [ ! -f "$notification_script" ]; then
+    log_info "Skipping Nostr Tor address DM; BirdNET-Pi Python environment or notification script is missing."
+    return 0
+  fi
+
+  if runuser -u "$BIRDNET_USER" -- "$BIRDNET_PYTHON" "$notification_script" --event "$event" --onion "$onion_url"; then
+    return 0
+  fi
+
+  log_error "Nostr Tor address DM failed. Tor configuration was still completed."
+  return 0
+}
+
 remove_config_value() {
   # Remove a BirdNET setting while preserving a possible config-file symlink.
   local key="$1"
@@ -189,6 +212,7 @@ remove_config_value() {
 
 enable_tor_service() {
   # Configure Tor transactionally and only report enabled after keys exist.
+  local event="${1:-enable}"
   local backup_file=""
   local hostname
 
@@ -229,6 +253,7 @@ enable_tor_service() {
   set_config_value "TOR_ONION" "\"http://$hostname\""
 
   log_info "Tor onion service enabled: http://$hostname"
+  send_tor_nostr_notification "$event" "http://$hostname"
 }
 
 disable_tor_service() {
@@ -274,6 +299,7 @@ restart_tor_service() {
   set_config_value "TOR_ONION" "\"http://$hostname\""
 
   log_info "Tor onion service restarted: http://$hostname"
+  send_tor_nostr_notification "restart" "http://$hostname"
 }
 
 reset_tor_service() {
@@ -283,7 +309,7 @@ reset_tor_service() {
   restart_tor
   rm -rf -- "$HS_DIR"
   remove_config_value "TOR_ONION"
-  enable_tor_service
+  enable_tor_service "reset"
 }
 
 main() {

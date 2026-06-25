@@ -118,6 +118,19 @@ def should_send_nostr(com_name, settings_dict):
     return True
 
 
+def should_send_nostr_operational(settings_dict):
+    # Require only the core Nostr DM configuration for operational messages such as Tor address changes.
+    if settings_dict.get("NOSTR_DM_ENABLED") != "1":
+        return False
+    if not settings_dict.get("NOSTR_DM_RECIPIENT_NPUB"):
+        return False
+    if not settings_dict.get("NOSTR_DM_SENDER_NSEC"):
+        return False
+    if len(parse_relays(settings_dict.get("NOSTR_DM_RELAYS"))) == 0:
+        return False
+    return True
+
+
 async def send_nip17_dm(sender_nsec, recipient_npub, relays, message):
     # Use nostr-sdk for NIP-17/NIP-44/NIP-59 crypto and relay publishing.
     try:
@@ -173,6 +186,22 @@ def notify_nostr(settings_dict, detection, reason):
         message,
     )
     nostr_species_last_notified[detection["com_name"]] = int(time.time())
+
+
+def sendNostrOperationalNotification(title, body):
+    # Send a non-detection Nostr DM using the same standalone sender, receiver, and relay settings.
+    settings_dict = get_settings()
+    if not should_send_nostr_operational(settings_dict):
+        return False
+
+    message = f"{title}\n\n{body}"
+    send_nostr_dm(
+        settings_dict.get("NOSTR_DM_SENDER_NSEC"),
+        settings_dict.get("NOSTR_DM_RECIPIENT_NPUB"),
+        parse_relays(settings_dict.get("NOSTR_DM_RELAYS")),
+        message,
+    )
+    return True
 
 
 def sendNostrNotifications(sci_name, com_name, confidence, confidencepct, path, date, time_of_day, week, latitude, longitude, cutoff, sens, overlap):

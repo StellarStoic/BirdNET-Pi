@@ -743,7 +743,7 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
       <h2>Nostr Direct Messages</h2>
       <input type="checkbox" name="nostr_dm_enabled" <?php if(($config['NOSTR_DM_ENABLED'] ?? "0") == 1) { echo "checked"; };?> >
       <label for="nostr_dm_enabled">Enable Nostr DM notifications</label><br>
-      <p>Send standalone encrypted Nostr direct messages using NIP-17. This does not use Apprise for delivery.</p>
+      <p>Send standalone encrypted Nostr direct messages using NIP-17. This does not use Apprise for delivery. When configured, BirdNET-Pi also sends Tor onion address updates after Tor is enabled, restarted, or reset.</p>
       <p><b>Security warning:</b> do not paste your personal Nostr account private key (<code>nsec</code>) here. Generate a dedicated BirdNET-Pi sender private key, or import a separate sender private key created only for this device.</p>
 
       <hr>
