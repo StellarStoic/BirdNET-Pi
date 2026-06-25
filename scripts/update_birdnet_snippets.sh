@@ -167,7 +167,7 @@ fi
 
 ensure_python_package inotify inotify
 ensure_python_package soundfile soundfile
-ensure_python_package nostr_sdk nostr-sdk==0.44.1
+ensure_python_package nostr_sdk nostr-sdk==0.44.2
 
 if ! grep -E '^NOSTR_DM_ENABLED=' /etc/birdnet/birdnet.conf &>/dev/null;then
   cat << 'EOF' >> /etc/birdnet/birdnet.conf

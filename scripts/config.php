@@ -62,7 +62,7 @@ function ensure_nostr_sdk($home, $user) {
     return "";
   }
 
-  $install = "sudo -u " . escapeshellarg($user) . " $pip install nostr-sdk==0.44.1 2>&1";
+  $install = "sudo -u " . escapeshellarg($user) . " $pip install nostr-sdk==0.44.2 2>&1";
   return shell_exec($install);
 }
 
