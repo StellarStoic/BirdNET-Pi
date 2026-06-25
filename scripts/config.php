@@ -23,6 +23,35 @@ if (file_exists($home."/BirdNET-Pi/body.txt")) {
   $apprise_notification_body = "";
 }
 
+function config_text($config, $key, $default = "") {
+  // Return escaped config text for safe use in form values and textareas.
+  return htmlspecialchars($config[$key] ?? $default, ENT_QUOTES | ENT_SUBSTITUTE);
+}
+
+function set_config_line($contents, $key, $line) {
+  // Replace or append one shell-style config assignment without regex side effects.
+  $lines = explode("\n", $contents);
+  $updated = false;
+  foreach ($lines as &$existing_line) {
+    if (strpos($existing_line, $key . "=") === 0) {
+      $existing_line = $line;
+      $updated = true;
+      break;
+    }
+  }
+  unset($existing_line);
+  if (!$updated) {
+    $lines[] = $line;
+  }
+  return implode("\n", $lines);
+}
+
+function quoted_config_value($value) {
+  // Keep settings parseable by stripping quotes and wrapping the value once.
+  $value = str_replace(["\r\n", "\r", "\n"], "\\n", $value);
+  return '"' . str_replace('"', '', $value) . '"';
+}
+
 function syslog_shell_exec($cmd, $sudo_user = null) {
   if ($sudo_user) {
     $cmd = "sudo -u $sudo_user $cmd";
@@ -53,6 +82,13 @@ if(isset($_GET['restart_php']) && $_GET['restart_php'] == "true") {
   die();
 }
 
+if(isset($_GET['generate_nostr_key']) && $_GET['generate_nostr_key'] == "true") {
+  $cmd = "sudo -u " . escapeshellarg($user) . " " . escapeshellarg($home."/BirdNET-Pi/birdnet/bin/python3") . " " . escapeshellarg($home."/BirdNET-Pi/scripts/generate_nostr_key.py") . " 2>&1";
+  header('Content-Type: application/json');
+  echo shell_exec($cmd);
+  die();
+}
+
 # Basic Settings
 if(isset($_GET["latitude"])){
   $latitude = $_GET["latitude"];
@@ -65,6 +101,14 @@ if(isset($_GET["latitude"])){
   $apprise_notification_title = $_GET['apprise_notification_title'];
   $apprise_notification_body = htmlspecialchars_decode($_GET['apprise_notification_body'], ENT_QUOTES);
   $minimum_time_limit = $_GET['minimum_time_limit'];
+  $nostr_dm_recipient_npub = trim($_GET['nostr_dm_recipient_npub'] ?? "");
+  $nostr_dm_sender_nsec = trim($_GET['nostr_dm_sender_nsec'] ?? "");
+  $nostr_dm_relays = trim($_GET['nostr_dm_relays'] ?? "");
+  $nostr_dm_notification_title = $_GET['nostr_dm_notification_title'] ?? "";
+  $nostr_dm_notification_body = htmlspecialchars_decode($_GET['nostr_dm_notification_body'] ?? "", ENT_QUOTES);
+  $nostr_dm_minimum_time_limit = $_GET['nostr_dm_minimum_time_limit'] ?? "0";
+  $nostr_dm_only_notify_species_names = htmlspecialchars_decode($_GET['nostr_dm_only_notify_species_names'] ?? "", ENT_QUOTES);
+  $nostr_dm_only_notify_species_names_2 = htmlspecialchars_decode($_GET['nostr_dm_only_notify_species_names_2'] ?? "", ENT_QUOTES);
   $image_provider = $_GET["image_provider"];
   $flickr_api_key = $_GET['flickr_api_key'];
   $flickr_filter_email = $_GET["flickr_filter_email"];
@@ -101,6 +145,26 @@ if(isset($_GET["latitude"])){
     $apprise_weekly_report = 1;
   } else {
     $apprise_weekly_report = 0;
+  }
+  if(isset($_GET['nostr_dm_enabled'])) {
+    $nostr_dm_enabled = 1;
+  } else {
+    $nostr_dm_enabled = 0;
+  }
+  if(isset($_GET['nostr_dm_notify_each_detection'])) {
+    $nostr_dm_notify_each_detection = 1;
+  } else {
+    $nostr_dm_notify_each_detection = 0;
+  }
+  if(isset($_GET['nostr_dm_notify_new_species'])) {
+    $nostr_dm_notify_new_species = 1;
+  } else {
+    $nostr_dm_notify_new_species = 0;
+  }
+  if(isset($_GET['nostr_dm_notify_new_species_each_day'])) {
+    $nostr_dm_notify_new_species_each_day = 1;
+  } else {
+    $nostr_dm_notify_new_species_each_day = 0;
   }
 
   if(isset($timezone) && in_array($timezone, DateTimeZone::listIdentifiers())) {
@@ -157,6 +221,18 @@ if(isset($_GET["latitude"])){
   $contents = preg_replace("/COLOR_SCHEME=.*/", "COLOR_SCHEME=$color_scheme", $contents);  
   $contents = preg_replace("/FLICKR_FILTER_EMAIL=.*/", "FLICKR_FILTER_EMAIL=$flickr_filter_email", $contents);
   $contents = preg_replace("/APPRISE_MINIMUM_SECONDS_BETWEEN_NOTIFICATIONS_PER_SPECIES=.*/", "APPRISE_MINIMUM_SECONDS_BETWEEN_NOTIFICATIONS_PER_SPECIES=$minimum_time_limit", $contents);
+  $contents = set_config_line($contents, "NOSTR_DM_ENABLED", "NOSTR_DM_ENABLED=$nostr_dm_enabled");
+  $contents = set_config_line($contents, "NOSTR_DM_RECIPIENT_NPUB", "NOSTR_DM_RECIPIENT_NPUB=" . quoted_config_value($nostr_dm_recipient_npub));
+  $contents = set_config_line($contents, "NOSTR_DM_SENDER_NSEC", "NOSTR_DM_SENDER_NSEC=" . quoted_config_value($nostr_dm_sender_nsec));
+  $contents = set_config_line($contents, "NOSTR_DM_RELAYS", "NOSTR_DM_RELAYS=" . quoted_config_value($nostr_dm_relays));
+  $contents = set_config_line($contents, "NOSTR_DM_NOTIFICATION_TITLE", "NOSTR_DM_NOTIFICATION_TITLE=" . quoted_config_value($nostr_dm_notification_title));
+  $contents = set_config_line($contents, "NOSTR_DM_NOTIFICATION_BODY", "NOSTR_DM_NOTIFICATION_BODY=" . quoted_config_value($nostr_dm_notification_body));
+  $contents = set_config_line($contents, "NOSTR_DM_NOTIFY_EACH_DETECTION", "NOSTR_DM_NOTIFY_EACH_DETECTION=$nostr_dm_notify_each_detection");
+  $contents = set_config_line($contents, "NOSTR_DM_NOTIFY_NEW_SPECIES", "NOSTR_DM_NOTIFY_NEW_SPECIES=$nostr_dm_notify_new_species");
+  $contents = set_config_line($contents, "NOSTR_DM_NOTIFY_NEW_SPECIES_EACH_DAY", "NOSTR_DM_NOTIFY_NEW_SPECIES_EACH_DAY=$nostr_dm_notify_new_species_each_day");
+  $contents = set_config_line($contents, "NOSTR_DM_MINIMUM_SECONDS_BETWEEN_NOTIFICATIONS_PER_SPECIES", "NOSTR_DM_MINIMUM_SECONDS_BETWEEN_NOTIFICATIONS_PER_SPECIES=$nostr_dm_minimum_time_limit");
+  $contents = set_config_line($contents, "NOSTR_DM_ONLY_NOTIFY_SPECIES_NAMES", "NOSTR_DM_ONLY_NOTIFY_SPECIES_NAMES=" . quoted_config_value($nostr_dm_only_notify_species_names));
+  $contents = set_config_line($contents, "NOSTR_DM_ONLY_NOTIFY_SPECIES_NAMES_2", "NOSTR_DM_ONLY_NOTIFY_SPECIES_NAMES_2=" . quoted_config_value($nostr_dm_only_notify_species_names_2));
   $contents = preg_replace("/MODEL=.*/", "MODEL=$model", $contents);
   $contents = preg_replace("/SF_THRESH=.*/", "SF_THRESH=$sf_thresh", $contents);
   $contents = preg_replace("/DATA_MODEL_VERSION=.*/", "DATA_MODEL_VERSION=$data_model_version", $contents);
@@ -220,6 +296,27 @@ if(isset($_GET['sendtest']) && $_GET['sendtest'] == "true") {
   die();
 }
 
+if(isset($_GET['sendnostrtest']) && $_GET['sendnostrtest'] == "true") {
+  $recipient = $_GET['nostr_dm_recipient_npub'] ?? "";
+  $sender = $_GET['nostr_dm_sender_nsec'] ?? "";
+  $relays = $_GET['nostr_dm_relays'] ?? "";
+  $title = $_GET['nostr_dm_notification_title'] ?? "";
+  $body = $_GET['nostr_dm_notification_body'] ?? "";
+
+  $cmd = "sudo -u " . escapeshellarg($user) . " " .
+    escapeshellarg($home."/BirdNET-Pi/birdnet/bin/python3") . " " .
+    escapeshellarg($home."/BirdNET-Pi/scripts/send_test_nostr_notification.py") .
+    " --recipient " . escapeshellarg($recipient) .
+    " --sender " . escapeshellarg($sender) .
+    " --relays " . escapeshellarg($relays) .
+    " --title " . escapeshellarg($title) .
+    " --body " . escapeshellarg($body) .
+    " 2>&1";
+  $ret = shell_exec($cmd);
+  echo "<pre class=\"bash\">".htmlspecialchars($ret, ENT_QUOTES | ENT_SUBSTITUTE)."</pre>";
+  die();
+}
+
 // have to get the config again after we change the variables, so the UI reflects the changes too
 $config = get_config($force_reload=true);
 ?>
@@ -259,6 +356,52 @@ function sendTestNotification(e) {
     }
     xmlHttp.open("GET", "scripts/config.php?sendtest=true"+"&apprise_notification_body="+apprise_notification_body+"&apprise_config="+apprise_config+"&apprise_notification_title="+apprise_notification_title, true); // true for asynchronous
     xmlHttp.send(null);
+}
+
+function generateNostrSenderKey(e) {
+  document.getElementById("nostrtestmsg").innerHTML = "";
+  e.classList.add("disabled");
+
+  var xmlHttp = new XMLHttpRequest();
+  xmlHttp.onreadystatechange = function() {
+    if (xmlHttp.readyState == 4) {
+      e.classList.remove("disabled");
+      if (xmlHttp.status == 200) {
+        try {
+          var keys = JSON.parse(xmlHttp.responseText);
+          document.getElementsByName("nostr_dm_sender_nsec")[0].value = keys.nsec;
+          document.getElementById("nostr_sender_npub").innerText = keys.npub;
+        } catch(err) {
+          document.getElementById("nostrtestmsg").innerHTML = "<pre class=\"bash\">" + xmlHttp.responseText + "</pre>";
+        }
+      }
+    }
+  }
+  xmlHttp.open("GET", "scripts/config.php?generate_nostr_key=true", true);
+  xmlHttp.send(null);
+}
+
+function sendNostrTestNotification(e) {
+  document.getElementById("nostrtestmsg").innerHTML = "";
+  e.classList.add("disabled");
+
+  var params = new URLSearchParams();
+  params.set("sendnostrtest", "true");
+  params.set("nostr_dm_recipient_npub", document.getElementsByName("nostr_dm_recipient_npub")[0].value);
+  params.set("nostr_dm_sender_nsec", document.getElementsByName("nostr_dm_sender_nsec")[0].value);
+  params.set("nostr_dm_relays", document.getElementsByName("nostr_dm_relays")[0].value);
+  params.set("nostr_dm_notification_title", document.getElementsByName("nostr_dm_notification_title")[0].value);
+  params.set("nostr_dm_notification_body", document.getElementsByName("nostr_dm_notification_body")[0].value);
+
+  var xmlHttp = new XMLHttpRequest();
+  xmlHttp.onreadystatechange = function() {
+    if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+      document.getElementById("nostrtestmsg").innerHTML = this.responseText + " Test sent! Make sure to <b>Update Settings</b> below.";
+      e.classList.remove("disabled");
+    }
+  }
+  xmlHttp.open("GET", "scripts/config.php?" + params.toString(), true);
+  xmlHttp.send(null);
 }
 </script>
       <table class="settingstable"><tr><td>
@@ -498,6 +641,42 @@ https://discordapp.com/api/webhooks/{WebhookID}/{WebhookToken}
 
       <button type="button" class="testbtn" onclick="sendTestNotification(this)">Send Test Notification</button><br>
       <span id="testsuccessmsg"></span>
+      </td></tr></table><br>
+      <table class="settingstable" style="width:100%"><tr><td>
+      <h2>Nostr Direct Messages</h2>
+      <p>Send standalone encrypted Nostr DMs using NIP-17. This does not use Apprise. Use a dedicated BirdNET-Pi sender key, not your personal Nostr private key.</p>
+      <input type="checkbox" name="nostr_dm_enabled" <?php if(($config['NOSTR_DM_ENABLED'] ?? "0") == 1) { echo "checked"; };?> >
+      <label for="nostr_dm_enabled">Enable Nostr DM notifications</label><br>
+      <label for="nostr_dm_recipient_npub">Recipient npub: </label>
+      <input name="nostr_dm_recipient_npub" style="width: 100%" type="text" placeholder="npub1..." value="<?php print(config_text($config, 'NOSTR_DM_RECIPIENT_NPUB'));?>" /><br>
+      <label for="nostr_dm_sender_nsec">BirdNET-Pi sender nsec: </label>
+      <input name="nostr_dm_sender_nsec" style="width: 100%" type="password" placeholder="nsec1..." value="<?php print(config_text($config, 'NOSTR_DM_SENDER_NSEC'));?>" /><br>
+      <button type="button" class="testbtn" onclick="generateNostrSenderKey(this)">Generate BirdNET-Pi sender key</button>
+      <p><small>Sender npub: <span id="nostr_sender_npub">Generate a key to show the sender npub.</span></small></p>
+      <label for="nostr_dm_relays">NIP-17 inbox relays, one per line or comma separated:</label><br>
+      <textarea class="testbtn" name="nostr_dm_relays" rows="3" type="text"><?php print(config_text($config, 'NOSTR_DM_RELAYS', 'wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net'));?></textarea>
+      <p><small>Best result: use 1-3 relays where your Nostr client receives NIP-17 DMs.</small></p>
+
+      <label for="nostr_dm_notification_title">Nostr DM Title: </label>
+      <input name="nostr_dm_notification_title" style="width: 100%" type="text" value="<?php print(config_text($config, 'NOSTR_DM_NOTIFICATION_TITLE', 'New BirdNET-Pi Detection'));?>" /><br>
+      <label for="nostr_dm_notification_body">Nostr DM Body: </label>
+      <textarea class="testbtn" name="nostr_dm_notification_body" rows="4" type="text"><?php print(config_text($config, 'NOSTR_DM_NOTIFICATION_BODY', 'A $comname ($sciname) was detected with $confidencepct% confidence ($reason)'));?></textarea>
+      <input type="checkbox" name="nostr_dm_notify_new_species" <?php if(($config['NOSTR_DM_NOTIFY_NEW_SPECIES'] ?? "0") == 1) { echo "checked"; };?> >
+      <label for="nostr_dm_notify_new_species">Notify each new infrequent species detection (&lt;5 visits per week)</label><br>
+      <input type="checkbox" name="nostr_dm_notify_new_species_each_day" <?php if(($config['NOSTR_DM_NOTIFY_NEW_SPECIES_EACH_DAY'] ?? "0") == 1) { echo "checked"; };?> >
+      <label for="nostr_dm_notify_new_species_each_day">Notify each species first detection of the day</label><br>
+      <input type="checkbox" name="nostr_dm_notify_each_detection" <?php if(($config['NOSTR_DM_NOTIFY_EACH_DETECTION'] ?? "0") == 1) { echo "checked"; };?> >
+      <label for="nostr_dm_notify_each_detection">Notify each new detection</label><br>
+      <hr>
+      <label for="nostr_dm_minimum_time_limit">Minimum time between Nostr DMs for the same species (sec):</label>
+      <input type="number" id="nostr_dm_minimum_time_limit" name="nostr_dm_minimum_time_limit" value="<?php echo config_text($config, 'NOSTR_DM_MINIMUM_SECONDS_BETWEEN_NOTIFICATIONS_PER_SPECIES', '0');?>" style="width:6em;" min="0"><br>
+      <label for="nostr_dm_only_notify_species_names">Exclude these species (comma separated common names):</label>
+      <input type="text" id="nostr_dm_only_notify_species_names" placeholder="Mourning Dove,American Crow" name="nostr_dm_only_notify_species_names" value="<?php echo config_text($config, 'NOSTR_DM_ONLY_NOTIFY_SPECIES_NAMES');?>" size=96><br>
+      <label for="nostr_dm_only_notify_species_names_2">ONLY notify for these species (comma separated common names):</label>
+      <input type="text" id="nostr_dm_only_notify_species_names_2" placeholder="Northern Cardinal,Carolina Chickadee,Eastern Bluebird" name="nostr_dm_only_notify_species_names_2" value="<?php echo config_text($config, 'NOSTR_DM_ONLY_NOTIFY_SPECIES_NAMES_2');?>" size=96><br>
+      <br>
+      <button type="button" class="testbtn" onclick="sendNostrTestNotification(this)">Send Test Nostr DM</button><br>
+      <span id="nostrtestmsg"></span>
       </td></tr></table><br>
       <table class="settingstable"><tr><td>
       <h2>Bird Photo Source</h2>

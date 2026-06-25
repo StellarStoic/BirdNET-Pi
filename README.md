@@ -56,6 +56,7 @@ Check out birds from around the world
 * [Adminer](https://www.adminer.org/) database maintenance
 * [phpSysInfo](https://github.com/phpsysinfo/phpsysinfo)
 * [Apprise Notifications](https://github.com/caronc/apprise) supporting 90+ notification platforms
+* Standalone Nostr NIP-17 direct-message notifications with a dedicated BirdNET-Pi sender key
 * Localization supported
 * **Remote dashboard access through a Tor v3 onion service**, without port forwarding or a public domain
 
@@ -126,6 +127,22 @@ Important security notes:
 - Tor 0.4.8+ proof-of-work defenses are enabled automatically when the installed Tor package supports them.
 
 See the complete [Tor Hosting Guide](docs/TOR_HOSTING.md) for troubleshooting, operational guidance, and configuration details.
+
+## Nostr Notifications
+
+This edition also supports standalone encrypted Nostr DMs for detection alerts. It is separate from Apprise and uses NIP-17 private direct messages.
+
+Setup path:
+
+1. Open **Tools > Settings**.
+2. Find **Nostr Direct Messages**.
+3. Enter your recipient `npub`.
+4. Click **Generate BirdNET-Pi sender key**.
+5. Set 1-3 NIP-17 inbox relays used by your Nostr client.
+6. Click **Send Test Nostr DM**.
+7. Enable the notification types you want and click **Update Settings**.
+
+Use the generated BirdNET-Pi sender key only for this device. Do not paste your personal Nostr `nsec` into BirdNET-Pi.
 
 Please take a look at the [wiki](https://github.com/mcguirepr89/BirdNET-Pi/wiki) and [discussions](https://github.com/mcguirepr89/BirdNET-Pi/discussions) for information on
 - [BirdNET-Pi's Deep Convolutional Neural Network(s)](https://github.com/mcguirepr89/BirdNET-Pi/wiki/BirdNET-Pi:-some-theory-on-classification-&-some-practical-hints)

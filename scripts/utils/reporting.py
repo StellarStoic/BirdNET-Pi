@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from .helpers import get_settings, get_font, DB_PATH
 from .classes import Detection, ParseFileName
 from .notifications import sendAppriseNotifications
+from .nostr_notifications import sendNostrNotifications
 
 log = logging.getLogger(__name__)
 
@@ -165,6 +166,23 @@ def apprise(file: ParseFileName, detections: [Detection]):
                 log.exception('Error during Apprise:', exc_info=e)
 
             species_apprised_this_run.append(detection.species)
+
+
+def nostr(file: ParseFileName, detections: [Detection]):
+    # Send standalone Nostr DMs for each detected species once per analysis run.
+    species_notified_this_run = []
+    conf = get_settings()
+
+    for detection in detections:
+        if detection.species not in species_notified_this_run:
+            try:
+                sendNostrNotifications(detection.scientific_name, detection.common_name, str(detection.confidence), str(detection.confidence_pct),
+                                       os.path.basename(detection.file_name_extr), detection.date, detection.time, str(detection.week),
+                                       conf['LATITUDE'], conf['LONGITUDE'], conf['CONFIDENCE'], conf['SENSITIVITY'], conf['OVERLAP'])
+            except BaseException as e:
+                log.exception('Error during Nostr notification:', exc_info=e)
+
+            species_notified_this_run.append(detection.species)
 
 
 def bird_weather(file: ParseFileName, detections: [Detection]):
